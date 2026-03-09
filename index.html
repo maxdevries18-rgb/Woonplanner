@@ -173,7 +173,7 @@ function formatDate(d) {
 }
 
 function normalizeTask(t) {
-  return { id: t.id, title: t.title, userId: t.user_id, category: t.category, dayIndex: t.day_index, done: t.done, deadline: t.deadline || "", weekMonday: t.week_monday || null };
+  return { id: t.id, title: t.title, userId: t.user_id ?? null, category: t.category, dayIndex: t.day_index, done: t.done, deadline: t.deadline || "", weekMonday: t.week_monday || null };
 }
 
 // ─── Login scherm ─────────────────────────────────────────────────────────────
@@ -331,9 +331,11 @@ function LoginScreen({ onLogin }) {
 }
 
 // ─── TaskCard ─────────────────────────────────────────────────────────────────
-function TaskCard({ task, onToggle, onDelete, showDay, categories, allUsers }) {
+function TaskCard({ task, onToggle, onDelete, onEdit, showDay, categories, allUsers }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const u = allUsers.find(u => u.id == task.userId) || { color: "#888", username: "?" };
+  const u = task.userId == null
+    ? { color: "#888", username: "Iedereen" }
+    : allUsers.find(u => u.id == task.userId) || { color: "#888", username: "?" };
   const c = categories.find(c => c.id === task.category) || { icon: "🏷️", label: task.category };
   const weekDates = getWeekDates();
   return (
@@ -380,10 +382,16 @@ function TaskCard({ task, onToggle, onDelete, showDay, categories, allUsers }) {
         )}
       </div>
       {!confirmDelete && (
-        <button onClick={() => setConfirmDelete(true)} style={{
-          background: "rgba(255,255,255,0.05)", border: "none", borderRadius: 8,
-          padding: "6px 8px", cursor: "pointer", color: "rgba(255,255,255,0.3)", fontSize: 14,
-        }}>✕</button>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          <button onClick={() => onEdit(task)} style={{
+            background: "rgba(255,255,255,0.05)", border: "none", borderRadius: 8,
+            padding: "6px 8px", cursor: "pointer", color: "rgba(255,255,255,0.3)", fontSize: 13,
+          }}>✏️</button>
+          <button onClick={() => setConfirmDelete(true)} style={{
+            background: "rgba(255,255,255,0.05)", border: "none", borderRadius: 8,
+            padding: "6px 8px", cursor: "pointer", color: "rgba(255,255,255,0.3)", fontSize: 14,
+          }}>✕</button>
+        </div>
       )}
     </div>
   );
@@ -410,7 +418,8 @@ function App() {
   });
   const [showLabelManager, setShowLabelManager] = useState(false);
   const [newLabel, setNewLabel] = useState({ label: "", icon: "🏷️" });
-  const [form, setForm] = useState({ title: "", category: DEFAULT_CATEGORIES[0].id, dayIndex: 0, deadline: "hele_dag" });
+  const [editingTask, setEditingTask] = useState(null); // null = nieuw, task object = bewerken
+  const [form, setForm] = useState({ title: "", userId: null, category: DEFAULT_CATEGORIES[0].id, dayIndex: 0, deadline: "hele_dag" });
   const [weekOffset, setWeekOffset] = useState(0);
 
   const weekDates = getWeekDates(weekOffset);
@@ -497,21 +506,38 @@ function App() {
     }
   }
 
-  async function addTask() {
+  async function saveTask() {
     if (!form.title.trim()) return;
     setSaving(true);
+    const userId = form.userId || currentUser.id;
     try {
-      const { data, error } = await supabase.from('tasks').insert([{
-        title: form.title, user_id: currentUser.id,
-        category: form.category, day_index: form.dayIndex,
-        done: false, deadline: form.deadline || '',
-        week_monday: currentMonday,
-      }]).select().single();
-      if (error) throw error;
-      setTasks(prev => [...prev, normalizeTask(data)]);
-      showNotif("🎉 Toegevoegd!", form.title);
+      if (editingTask) {
+        // Bijwerken
+        const { error } = await supabase.from('tasks').update({
+          title: form.title, user_id: userId,
+          category: form.category, day_index: form.dayIndex,
+          deadline: form.deadline || '',
+        }).eq('id', editingTask.id);
+        if (error) throw error;
+        setTasks(prev => prev.map(t => t.id === editingTask.id
+          ? { ...t, title: form.title, userId, category: form.category, dayIndex: form.dayIndex, deadline: form.deadline }
+          : t));
+        showNotif("✏️ Bijgewerkt!", form.title);
+      } else {
+        // Nieuw
+        const { data, error } = await supabase.from('tasks').insert([{
+          title: form.title, user_id: userId,
+          category: form.category, day_index: form.dayIndex,
+          done: false, deadline: form.deadline || '',
+          week_monday: currentMonday,
+        }]).select().single();
+        if (error) throw error;
+        setTasks(prev => [...prev, normalizeTask(data)]);
+        showNotif("🎉 Toegevoegd!", form.title);
+      }
       setShowModal(false);
-      setForm(f => ({ ...f, title: "", dayIndex: selectedDay, deadline: "hele_dag" }));
+      setEditingTask(null);
+      setForm(f => ({ ...f, title: "", userId: null, dayIndex: selectedDay, deadline: "hele_dag" }));
     } catch { showNotif("❌ Mislukt", "Kon taak niet opslaan"); }
     finally { setSaving(false); }
   }
@@ -524,7 +550,17 @@ function App() {
     } catch { showNotif("❌ Mislukt", "Kon taak niet verwijderen"); loadTasks(); }
   }
 
-  function openModal(dayIndex) { setForm(f => ({ ...f, dayIndex, title: "", deadline: "hele_dag" })); setShowModal(true); }
+  function openModal(dayIndex) {
+    setEditingTask(null);
+    setForm({ title: "", userId: null, category: categories[0]?.id || "household", dayIndex, deadline: "hele_dag" });
+    setShowModal(true);
+  }
+
+  function openEditModal(task) {
+    setEditingTask(task);
+    setForm({ title: task.title, userId: task.userId, category: task.category, dayIndex: task.dayIndex, deadline: task.deadline || "hele_dag" });
+    setShowModal(true);
+  }
   function addLabel() {
     if (!newLabel.label.trim()) return;
     setCategories(prev => [...prev, { id: "custom_" + Date.now(), label: newLabel.label.trim(), icon: newLabel.icon }]);
@@ -695,7 +731,7 @@ function App() {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {tasksByDay(selectedDay).sort((a, b) => a.deadline.localeCompare(b.deadline)).map(t => (
-                  <TaskCard key={t.id} task={t} onToggle={toggleDone} onDelete={deleteTask} categories={categories} allUsers={allUsers} />
+                  <TaskCard key={t.id} task={t} onToggle={toggleDone} onDelete={deleteTask} onEdit={openEditModal} categories={categories} allUsers={allUsers} />
                 ))}
               </div>
             )}
@@ -716,7 +752,7 @@ function App() {
                   </h3>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {catTasks.sort((a, b) => a.dayIndex - b.dayIndex).map(t => (
-                      <TaskCard key={t.id} task={t} onToggle={toggleDone} onDelete={deleteTask} showDay categories={categories} allUsers={allUsers} />
+                      <TaskCard key={t.id} task={t} onToggle={toggleDone} onDelete={deleteTask} onEdit={openEditModal} showDay categories={categories} allUsers={allUsers} />
                     ))}
                   </div>
                 </div>
@@ -773,18 +809,37 @@ function App() {
 
       {/* Modal - nieuwe taak */}
       {showModal && (
-        <div onClick={() => setShowModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 500, backdropFilter: "blur(4px)" }}>
+        <div onClick={() => { setShowModal(false); setEditingTask(null); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 500, backdropFilter: "blur(4px)" }}>
           <div className="slide-in" onClick={e => e.stopPropagation()} style={{ background: "linear-gradient(180deg, #1e1e3f, #16163a)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "24px 24px 0 0", padding: "28px 24px 40px", width: "100%", maxWidth: 500, maxHeight: "90vh", overflowY: "auto" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-              <div style={{ width: 32, height: 32, borderRadius: "50%", background: currentUser.color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 14 }}>{currentUser.username[0].toUpperCase()}</div>
-              <h3 style={{ fontSize: 18, fontWeight: 900, color: "#f0f0f0", fontFamily: "'Space Mono', monospace" }}>Taak voor {currentUser.username}</h3>
-            </div>
+            <h3 style={{ fontSize: 18, fontWeight: 900, color: "#f0f0f0", fontFamily: "'Space Mono', monospace", marginBottom: 20 }}>
+              {editingTask ? "✏️ Taak wijzigen" : "➕ Nieuwe taak"}
+            </h3>
 
             <input placeholder="Wat moet er gebeuren?" value={form.title}
               onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-              onKeyDown={e => e.key === "Enter" && addTask()}
+              onKeyDown={e => e.key === "Enter" && saveTask()}
               style={{ width: "100%", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "14px 16px", color: "#fff", fontSize: 15, marginBottom: 16, outline: "none" }}
             />
+
+            {/* Voor wie */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, opacity: 0.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 8, color: "#fff" }}>Voor wie</label>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {[{ id: null, username: "Iedereen", color: "#888" }, ...allUsers].map(u => {
+                  const active = form.userId == u.id;
+                  return (
+                    <button key={u.id ?? "all"} onClick={() => setForm(f => ({ ...f, userId: u.id }))} style={{
+                      background: active ? u.color : "rgba(255,255,255,0.06)",
+                      color: "#fff", border: active ? `1px solid ${u.color}` : "1px solid transparent",
+                      borderRadius: 20, padding: "6px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                      opacity: active ? 1 : 0.55, transition: "all 0.15s",
+                    }}>
+                      {u.id ? u.username[0].toUpperCase() + " " : "👥 "}{u.username}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
               <div>
@@ -814,11 +869,11 @@ function App() {
               </div>
             </div>
 
-            <button onClick={addTask} disabled={saving} style={{
+            <button onClick={saveTask} disabled={saving} style={{
               width: "100%", padding: "16px",
               background: saving ? "rgba(255,255,255,0.1)" : `linear-gradient(135deg, ${currentUser.color}, ${currentUser.color}bb)`,
               color: "#fff", border: "none", borderRadius: 14, fontSize: 16, fontWeight: 800, cursor: saving ? "not-allowed" : "pointer",
-            }}>{saving ? "Opslaan..." : "Taak toevoegen 🚀"}</button>
+            }}>{saving ? "Opslaan..." : editingTask ? "Wijzigingen opslaan ✓" : "Taak toevoegen 🚀"}</button>
           </div>
         </div>
       )}
