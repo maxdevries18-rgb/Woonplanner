@@ -401,6 +401,7 @@ function App() {
   const [showModal, setShowModal] = useState(false);
   const [notification, setNotification] = useState(null);
   const [filterUser, setFilterUser] = useState("all");
+  const [filterDone, setFilterDone] = useState("all"); // all | done | open
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [categories, setCategories] = useState(() => {
@@ -473,7 +474,8 @@ function App() {
   const filtered = tasks.filter(t => {
     const matchUser = filterUser === "all" || t.userId == filterUser;
     const matchWeek = t.weekMonday === currentMonday;
-    return matchUser && matchWeek;
+    const matchDone = filterDone === "all" || (filterDone === "done" && t.done) || (filterDone === "open" && !t.done);
+    return matchUser && matchWeek && matchDone;
   });
 
   async function refresh() {
@@ -729,17 +731,22 @@ function App() {
           </div>
         )}
 
-        {/* Stats */}
+        {/* Stats / filters */}
         <div style={{ marginTop: 32, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
           {[
-            { label: "Totaal", value: filtered.length, icon: "📋", color: "#7c7cff" },
-            { label: "Gedaan", value: filtered.filter(t => t.done).length, icon: "✅", color: "#4ECDC4" },
-            { label: "Open", value: filtered.filter(t => !t.done).length, icon: "⏳", color: "#FF6B6B" },
+            { key: "all",  label: "Totaal", value: tasks.filter(t => (filterUser === "all" || t.userId == filterUser) && t.weekMonday === currentMonday).length, icon: "📋", color: "#7c7cff" },
+            { key: "done", label: "Gedaan", value: tasks.filter(t => (filterUser === "all" || t.userId == filterUser) && t.weekMonday === currentMonday && t.done).length, icon: "✅", color: "#4ECDC4" },
+            { key: "open", label: "Open",   value: tasks.filter(t => (filterUser === "all" || t.userId == filterUser) && t.weekMonday === currentMonday && !t.done).length, icon: "⏳", color: "#FF6B6B" },
           ].map(s => (
-            <div key={s.label} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 16, padding: "16px 20px", border: "1px solid rgba(255,255,255,0.06)", textAlign: "center" }}>
+            <div key={s.key} onClick={() => setFilterDone(s.key)} style={{
+              background: filterDone === s.key ? `${s.color}22` : "rgba(255,255,255,0.04)",
+              borderRadius: 16, padding: "16px 20px",
+              border: filterDone === s.key ? `1px solid ${s.color}66` : "1px solid rgba(255,255,255,0.06)",
+              textAlign: "center", cursor: "pointer", transition: "all 0.2s",
+            }}>
               <div style={{ fontSize: 24, marginBottom: 4 }}>{s.icon}</div>
               <div style={{ fontSize: 28, fontWeight: 900, fontFamily: "'Space Mono', monospace", color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 12, opacity: 0.5, marginTop: 2, fontWeight: 600 }}>{s.label}</div>
+              <div style={{ fontSize: 12, opacity: filterDone === s.key ? 0.9 : 0.5, marginTop: 2, fontWeight: 700 }}>{s.label}</div>
             </div>
           ))}
         </div>
