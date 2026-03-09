@@ -173,7 +173,18 @@ function formatDate(d) {
 }
 
 function normalizeTask(t) {
-  return { id: t.id, title: t.title, userId: t.user_id ?? null, category: t.category, dayIndex: t.day_index, done: t.done, deadline: t.deadline || "", weekMonday: t.week_monday || null };
+  // user_id kan null (iedereen), een getal, of "1,2,3" zijn
+  let userIds = null;
+  if (t.user_id !== null && t.user_id !== undefined) {
+    userIds = String(t.user_id).split(',').map(s => parseInt(s)).filter(n => !isNaN(n));
+  }
+  return {
+    id: t.id, title: t.title,
+    userIds, // array van user ids, of null voor iedereen
+    category: t.category, dayIndex: t.day_index,
+    done: t.done, deadline: t.deadline || "",
+    weekMonday: t.week_monday || null
+  };
 }
 
 // ─── Login scherm ─────────────────────────────────────────────────────────────
@@ -333,24 +344,30 @@ function LoginScreen({ onLogin }) {
 // ─── TaskCard ─────────────────────────────────────────────────────────────────
 function TaskCard({ task, onToggle, onDelete, onEdit, showDay, categories, allUsers }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const u = task.userId == null
-    ? { color: "#888", username: "Iedereen" }
-    : allUsers.find(u => u.id == task.userId) || { color: "#888", username: "?" };
+
+  // Bepaal welke gebruikers bij deze taak horen
+  const taskUsers = task.userIds === null
+    ? [{ id: null, color: "#888", username: "Iedereen" }]
+    : task.userIds.map(id => allUsers.find(u => u.id == id)).filter(Boolean);
+
+  // Gebruik kleur van eerste gebruiker voor de border
+  const primaryColor = taskUsers[0]?.color || "#888";
+
   const c = categories.find(c => c.id === task.category) || { icon: "🏷️", label: task.category };
   const weekDates = getWeekDates();
   return (
     <div className="task-card" style={{
-      background: `linear-gradient(135deg, ${u.color}11, ${u.color}06)`,
-      border: confirmDelete ? "1px solid rgba(255,80,80,0.4)" : `1px solid ${u.color}33`,
-      borderLeft: `4px solid ${confirmDelete ? "#FF6B6B" : u.color}`,
+      background: `linear-gradient(135deg, ${primaryColor}11, ${primaryColor}06)`,
+      border: confirmDelete ? "1px solid rgba(255,80,80,0.4)" : `1px solid ${primaryColor}33`,
+      borderLeft: `4px solid ${confirmDelete ? "#FF6B6B" : primaryColor}`,
       borderRadius: 14, padding: "14px 16px",
       display: "flex", alignItems: "center", gap: 12, opacity: task.done ? 0.55 : 1,
       transition: "border 0.2s",
     }}>
       <button onClick={() => onToggle(task.id, task.done)} style={{
         width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
-        background: task.done ? u.color : "transparent",
-        border: `2px solid ${u.color}`, cursor: "pointer",
+        background: task.done ? primaryColor : "transparent",
+        border: `2px solid ${primaryColor}`, cursor: "pointer",
         display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: 14, color: "#fff", transition: "all 0.2s",
       }}>{task.done ? "✓" : ""}</button>
@@ -372,10 +389,13 @@ function TaskCard({ task, onToggle, onDelete, onEdit, showDay, categories, allUs
             }}>Annuleer</button>
           </div>
         ) : (
-          <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, background: u.color + "22", color: u.color, borderRadius: 6, padding: "2px 8px", fontWeight: 700 }}>
-              {u.username[0]?.toUpperCase()} {u.username}
-            </span>
+          <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap", alignItems: "center" }}>
+            {/* Gebruikersbadges */}
+            {taskUsers.map(u => (
+              <span key={u.id ?? "all"} style={{ fontSize: 11, background: u.color + "22", color: u.color, borderRadius: 6, padding: "2px 8px", fontWeight: 700 }}>
+                {u.username[0]?.toUpperCase()} {u.username}
+              </span>
+            ))}
             {showDay && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", padding: "2px 0" }}>{DAYS[task.dayIndex]} {formatDate(weekDates[task.dayIndex])}</span>}
             {task.deadline && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", padding: "2px 0" }}>{task.deadline === "hele_dag" ? "🌅 Hele dag" : `🕐 ${task.deadline}`}</span>}
           </div>
@@ -419,8 +439,9 @@ function App() {
   const [showLabelManager, setShowLabelManager] = useState(false);
   const [newLabel, setNewLabel] = useState({ label: "", icon: "🏷️" });
   const [editingTask, setEditingTask] = useState(null); // null = nieuw, task object = bewerken
-  const [form, setForm] = useState({ title: "", userId: null, category: DEFAULT_CATEGORIES[0].id, dayIndex: 0, deadline: "hele_dag" });
+  const [form, setForm] = useState({ title: "", userIds: [], category: DEFAULT_CATEGORIES[0].id, dayIndex: 0, deadline: "hele_dag" });
   const [weekOffset, setWeekOffset] = useState(0);
+  const [holidays, setHolidays] = useState({});
 
   const weekDates = getWeekDates(weekOffset);
   const todayIndex = weekOffset === 0 ? (() => { const d = new Date().getDay(); return d === 0 ? 6 : d - 1; })() : -1;
@@ -469,6 +490,32 @@ function App() {
     try { localStorage.setItem("woonplanner_categories", JSON.stringify(categories)); } catch {}
   }, [categories]);
 
+  // ─── Feestdagen laden via Nager.Date API ────────────────────────────────────
+  useEffect(() => {
+    async function laadFeestdagen() {
+      const jaren = [...new Set([new Date().getFullYear(), new Date().getFullYear() + 1])];
+      const resultaten = {};
+      for (const jaar of jaren) {
+        try {
+          const cached = localStorage.getItem(`holidays_NL_${jaar}`);
+          if (cached) {
+            Object.assign(resultaten, JSON.parse(cached));
+          } else {
+            const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${jaar}/NL`);
+            const data = await res.json();
+            const jaarData = {};
+            data.forEach(h => { jaarData[h.date] = h.localName; });
+            localStorage.setItem(`holidays_NL_${jaar}`, JSON.stringify(jaarData));
+            Object.assign(resultaten, jaarData);
+          }
+        } catch {}
+      }
+      setHolidays(resultaten);
+    }
+    laadFeestdagen();
+  }, []);
+
+  async function vraagNotificatieToestemming() {
   function handleLogin(user) { setCurrentUser(user); }
 
   function uitloggen() {
@@ -481,7 +528,7 @@ function App() {
   const currentMonday = weekDates[0].toISOString().split('T')[0];
 
   const filtered = tasks.filter(t => {
-    const matchUser = filterUser === "all" || t.userId == filterUser;
+    const matchUser = filterUser === "all" || t.userIds === null || t.userIds?.includes(parseInt(filterUser));
     const matchWeek = t.weekMonday === currentMonday;
     const matchDone = filterDone === "all" || (filterDone === "done" && t.done) || (filterDone === "open" && !t.done);
     return matchUser && matchWeek && matchDone;
@@ -509,24 +556,24 @@ function App() {
   async function saveTask() {
     if (!form.title.trim()) return;
     setSaving(true);
-    const userId = form.userId || currentUser.id;
+    // null = iedereen, anders komma-gescheiden string van ids
+    const user_id = form.userIds.length === 0 ? null : form.userIds.join(',');
     try {
       if (editingTask) {
-        // Bijwerken
         const { error } = await supabase.from('tasks').update({
-          title: form.title, user_id: userId,
+          title: form.title, user_id,
           category: form.category, day_index: form.dayIndex,
           deadline: form.deadline || '',
         }).eq('id', editingTask.id);
         if (error) throw error;
+        const userIds = user_id ? user_id.split(',').map(Number) : null;
         setTasks(prev => prev.map(t => t.id === editingTask.id
-          ? { ...t, title: form.title, userId, category: form.category, dayIndex: form.dayIndex, deadline: form.deadline }
+          ? { ...t, title: form.title, userIds, category: form.category, dayIndex: form.dayIndex, deadline: form.deadline }
           : t));
         showNotif("✏️ Bijgewerkt!", form.title);
       } else {
-        // Nieuw
         const { data, error } = await supabase.from('tasks').insert([{
-          title: form.title, user_id: userId,
+          title: form.title, user_id,
           category: form.category, day_index: form.dayIndex,
           done: false, deadline: form.deadline || '',
           week_monday: currentMonday,
@@ -537,7 +584,7 @@ function App() {
       }
       setShowModal(false);
       setEditingTask(null);
-      setForm(f => ({ ...f, title: "", userId: null, dayIndex: selectedDay, deadline: "hele_dag" }));
+      setForm(f => ({ ...f, title: "", userIds: [], dayIndex: selectedDay, deadline: "hele_dag" }));
     } catch { showNotif("❌ Mislukt", "Kon taak niet opslaan"); }
     finally { setSaving(false); }
   }
@@ -552,13 +599,13 @@ function App() {
 
   function openModal(dayIndex) {
     setEditingTask(null);
-    setForm({ title: "", userId: null, category: categories[0]?.id || "household", dayIndex, deadline: "hele_dag" });
+    setForm({ title: "", userIds: [], category: categories[0]?.id || "household", dayIndex, deadline: "hele_dag" });
     setShowModal(true);
   }
 
   function openEditModal(task) {
     setEditingTask(task);
-    setForm({ title: task.title, userId: task.userId, category: task.category, dayIndex: task.dayIndex, deadline: task.deadline || "hele_dag" });
+    setForm({ title: task.title, userIds: task.userIds || [], category: task.category, dayIndex: task.dayIndex, deadline: task.deadline || "hele_dag" });
     setShowModal(true);
   }
   function addLabel() {
@@ -567,6 +614,11 @@ function App() {
     setNewLabel({ label: "", icon: "🏷️" });
   }
   function deleteLabel(id) { setCategories(prev => prev.filter(c => c.id !== id)); }
+  function holidayForDate(date) {
+    const key = date.toISOString().split('T')[0];
+    return holidays[key] || null;
+  }
+
   function showNotif(title, body) { setNotification({ title, body }); setTimeout(() => setNotification(null), 3000); }
   const tasksByDay = (i) => filtered.filter(t => t.dayIndex === i);
 
@@ -673,25 +725,28 @@ function App() {
         {/* WEEK VIEW */}
         {view === "week" && (
           <div className="week-grid slide-in">
-            {DAYS.map((day, i) => (
+            {DAYS.map((day, i) => {
+              const holiday = holidayForDate(weekDates[i]);
+              return (
               <div key={i} className="day-col week-day-col" onClick={() => { setSelectedDay(i); setView("day"); }} style={{
-                background: i === todayIndex ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)",
+                background: holiday ? "rgba(255,211,61,0.07)" : i === todayIndex ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)",
                 borderRadius: 16, padding: "12px",
-                border: i === todayIndex ? "1px solid rgba(255,255,255,0.2)" : "1px solid rgba(255,255,255,0.05)",
+                border: holiday ? "1px solid rgba(255,211,61,0.25)" : i === todayIndex ? "1px solid rgba(255,255,255,0.2)" : "1px solid rgba(255,255,255,0.05)",
                 cursor: "pointer", minHeight: 160,
               }}>
                 <div className="day-inner">
                   <div className="day-date" style={{ marginBottom: 10 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.5, textTransform: "uppercase", letterSpacing: 1 }}>{day}</div>
-                    <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "'Space Mono', monospace", color: i === todayIndex ? "#FF6B6B" : "inherit" }}>{weekDates[i].getDate()}</div>
+                    <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "'Space Mono', monospace", color: i === todayIndex ? "#FF6B6B" : holiday ? "#FFD93D" : "inherit" }}>{weekDates[i].getDate()}</div>
+                    {holiday && <div style={{ fontSize: 9, color: "#FFD93D", fontWeight: 700, marginTop: 2, lineHeight: 1.2 }}>{holiday}</div>}
                   </div>
                   <div className="day-tasks" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     {tasksByDay(i).slice(0, 5).map(t => {
-                      const u = allUsers.find(u => u.id == t.userId) || { color: "#888" };
+                      const firstUser = t.userIds === null ? { color: "#888" } : allUsers.find(u => u.id == t.userIds?.[0]) || { color: "#888" };
                       const c = categories.find(c => c.id === t.category) || { icon: "🏷️" };
                       return (
                         <div key={t.id} style={{
-                          background: u.color + "22", borderLeft: `3px solid ${u.color}`,
+                          background: firstUser.color + "22", borderLeft: `3px solid ${firstUser.color}`,
                           borderRadius: "0 6px 6px 0", padding: "4px 6px",
                           fontSize: 11, fontWeight: 600, opacity: t.done ? 0.4 : 1,
                           overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", color: "#f0f0f0",
@@ -699,11 +754,13 @@ function App() {
                       );
                     })}
                     {tasksByDay(i).length > 5 && <div style={{ fontSize: 10, opacity: 0.4 }}>+{tasksByDay(i).length - 5} meer</div>}
-                    {tasksByDay(i).length === 0 && <div style={{ fontSize: 11, opacity: 0.25, fontStyle: "italic" }}>Vrij</div>}
+                    {tasksByDay(i).length === 0 && !holiday && <div style={{ fontSize: 11, opacity: 0.25, fontStyle: "italic" }}>Vrij</div>}
+                    {tasksByDay(i).length === 0 && holiday && <div style={{ fontSize: 11, color: "#FFD93D", opacity: 0.6, fontStyle: "italic" }}>Feestdag 🎉</div>}
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -720,9 +777,15 @@ function App() {
                 }}>{d} {weekDates[i].getDate()}</button>
               ))}
             </div>
-            <h2 style={{ fontSize: 22, fontWeight: 900, marginBottom: 16, fontFamily: "'Space Mono', monospace" }}>
+            <h2 style={{ fontSize: 22, fontWeight: 900, marginBottom: holidayForDate(weekDates[selectedDay]) ? 6 : 16, fontFamily: "'Space Mono', monospace" }}>
               {DAYS_FULL[selectedDay]} <span style={{ opacity: 0.4, fontWeight: 400, fontSize: 16 }}>{formatDate(weekDates[selectedDay])}</span>
             </h2>
+            {holidayForDate(weekDates[selectedDay]) && (
+              <div style={{ background: "rgba(255,211,61,0.12)", border: "1px solid rgba(255,211,61,0.3)", borderRadius: 10, padding: "8px 14px", marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 16 }}>🎉</span>
+                <span style={{ color: "#FFD93D", fontWeight: 700, fontSize: 13 }}>{holidayForDate(weekDates[selectedDay])}</span>
+              </div>
+            )}
             {tasksByDay(selectedDay).length === 0 ? (
               <div style={{ textAlign: "center", padding: "60px 20px", opacity: 0.3 }}>
                 <div style={{ fontSize: 48, marginBottom: 12 }}>😴</div>
@@ -770,9 +833,9 @@ function App() {
         {/* Stats / filters */}
         <div style={{ marginTop: 32, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
           {[
-            { key: "all",  label: "Totaal", value: tasks.filter(t => (filterUser === "all" || t.userId == filterUser) && t.weekMonday === currentMonday).length, icon: "📋", color: "#7c7cff" },
-            { key: "done", label: "Gedaan", value: tasks.filter(t => (filterUser === "all" || t.userId == filterUser) && t.weekMonday === currentMonday && t.done).length, icon: "✅", color: "#4ECDC4" },
-            { key: "open", label: "Open",   value: tasks.filter(t => (filterUser === "all" || t.userId == filterUser) && t.weekMonday === currentMonday && !t.done).length, icon: "⏳", color: "#FF6B6B" },
+            { key: "all",  label: "Totaal", value: tasks.filter(t => (filterUser === "all" || t.userIds === null || t.userIds?.includes(parseInt(filterUser))) && t.weekMonday === currentMonday).length, icon: "📋", color: "#7c7cff" },
+            { key: "done", label: "Gedaan", value: tasks.filter(t => (filterUser === "all" || t.userIds === null || t.userIds?.includes(parseInt(filterUser))) && t.weekMonday === currentMonday && t.done).length, icon: "✅", color: "#4ECDC4" },
+            { key: "open", label: "Open",   value: tasks.filter(t => (filterUser === "all" || t.userIds === null || t.userIds?.includes(parseInt(filterUser))) && t.weekMonday === currentMonday && !t.done).length, icon: "⏳", color: "#FF6B6B" },
           ].map(s => (
             <div key={s.key} onClick={() => setFilterDone(s.key)} style={{
               background: filterDone === s.key ? `${s.color}22` : "rgba(255,255,255,0.04)",
@@ -821,24 +884,43 @@ function App() {
               style={{ width: "100%", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "14px 16px", color: "#fff", fontSize: 15, marginBottom: 16, outline: "none" }}
             />
 
-            {/* Voor wie */}
+            {/* Voor wie — meerdere gebruikers mogelijk */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 11, opacity: 0.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 8, color: "#fff" }}>Voor wie</label>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {[{ id: null, username: "Iedereen", color: "#888" }, ...allUsers].map(u => {
-                  const active = form.userId == u.id;
+                {/* Iedereen knop — deselecteert alle individuen */}
+                <button onClick={() => setForm(f => ({ ...f, userIds: [] }))} style={{
+                  background: form.userIds.length === 0 ? "#888" : "rgba(255,255,255,0.06)",
+                  color: "#fff", border: form.userIds.length === 0 ? "1px solid #888" : "1px solid transparent",
+                  borderRadius: 20, padding: "6px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                  opacity: form.userIds.length === 0 ? 1 : 0.5, transition: "all 0.15s",
+                }}>👥 Iedereen</button>
+                {allUsers.map(u => {
+                  const active = form.userIds.includes(u.id);
                   return (
-                    <button key={u.id ?? "all"} onClick={() => setForm(f => ({ ...f, userId: u.id }))} style={{
+                    <button key={u.id} onClick={() => {
+                      setForm(f => ({
+                        ...f,
+                        userIds: active
+                          ? f.userIds.filter(id => id !== u.id)
+                          : [...f.userIds, u.id]
+                      }));
+                    }} style={{
                       background: active ? u.color : "rgba(255,255,255,0.06)",
                       color: "#fff", border: active ? `1px solid ${u.color}` : "1px solid transparent",
                       borderRadius: 20, padding: "6px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                      opacity: active ? 1 : 0.55, transition: "all 0.15s",
+                      opacity: active ? 1 : 0.5, transition: "all 0.15s",
+                      position: "relative",
                     }}>
-                      {u.id ? u.username[0].toUpperCase() + " " : "👥 "}{u.username}
+                      {u.username[0].toUpperCase()} {u.username}
+                      {active && <span style={{ marginLeft: 4, fontSize: 11 }}>✓</span>}
                     </button>
                   );
                 })}
               </div>
+              <p style={{ fontSize: 11, opacity: 0.35, marginTop: 6 }}>
+                {form.userIds.length === 0 ? "Taak is voor iedereen" : `Geselecteerd: ${form.userIds.length} persoon${form.userIds.length > 1 ? 'en' : ''}`}
+              </p>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
