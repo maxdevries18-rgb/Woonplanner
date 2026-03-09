@@ -322,7 +322,7 @@ function App() {
     async function herstelSessie() {
       const savedId = localStorage.getItem("woonplanner_user_id");
       if (savedId) {
-        const { data } = await supabase.from('users').select('*').eq('id', savedId).single();
+        const { data } = await supabase.from('users').select('*').eq('id', parseInt(savedId)).single();
         if (data) setCurrentUser(data);
       }
       setLoading(false);
