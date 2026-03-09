@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
@@ -16,7 +16,29 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); min-height: 100vh; }
+
+    /* Fix witte balk boven en onder op iPhone webapp */
+    html {
+      background: #1a1a2e;
+      height: 100%;
+    }
+    body {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      background-attachment: fixed;
+      min-height: 100%;
+      min-height: -webkit-fill-available;
+      /* Voorkom wit vlak bij overscroll */
+      overscroll-behavior: none;
+    }
+    #root {
+      min-height: 100vh;
+      min-height: -webkit-fill-available;
+    }
+
+    /* Safe area padding voor iPhone notch/Dynamic Island */
+    .safe-top { padding-top: env(safe-area-inset-top); }
+    .safe-bottom { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
@@ -36,6 +58,29 @@
     .color-swatch:hover { transform: scale(1.15); }
     .color-swatch.selected { border-color: #fff; transform: scale(1.15); }
     input::placeholder { color: rgba(255,255,255,0.3); }
+
+    /* Week weergave: scrollbaar op mobiel, grid op desktop */
+    .week-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+    }
+    @media (max-width: 600px) {
+      .week-grid {
+        display: flex;
+        overflow-x: auto;
+        gap: 8px;
+        padding-bottom: 8px;
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+      }
+      .week-grid::-webkit-scrollbar { display: none; }
+      .week-day-col {
+        flex: 0 0 calc(50vw - 24px);
+        scroll-snap-align: start;
+        min-width: 130px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -470,11 +515,11 @@ function App() {
   );
 
   return (
-    <div style={{ minHeight: "100vh", fontFamily: "'DM Sans', 'Segoe UI', sans-serif", color: "#f0f0f0", paddingBottom: 80 }}>
+    <div style={{ minHeight: "100vh", fontFamily: "'DM Sans', 'Segoe UI', sans-serif", color: "#f0f0f0", paddingBottom: "calc(80px + env(safe-area-inset-bottom))" }}>
 
       {notification && (
         <div className="notif" style={{
-          position: "fixed", top: 20, right: 20, zIndex: 9999,
+          position: "fixed", top: "calc(20px + env(safe-area-inset-top))", right: 20, zIndex: 9999,
           background: "linear-gradient(135deg, #2d2d5e, #3d3d7e)",
           border: "1px solid rgba(255,255,255,0.15)", borderRadius: 16,
           padding: "14px 20px", boxShadow: "0 20px 60px rgba(0,0,0,0.5)", maxWidth: 280,
@@ -485,7 +530,7 @@ function App() {
       )}
 
       {/* Header */}
-      <div style={{ padding: "20px 20px 14px", background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.06)", backdropFilter: "blur(10px)", position: "sticky", top: 0, zIndex: 100 }}>
+      <div style={{ paddingTop: "calc(20px + env(safe-area-inset-top))", paddingBottom: 14, paddingLeft: 20, paddingRight: 20, background: "rgba(26,26,46,0.97)", borderBottom: "1px solid rgba(255,255,255,0.06)", backdropFilter: "blur(10px)", position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
             <div>
@@ -551,9 +596,9 @@ function App() {
 
         {/* WEEK VIEW */}
         {view === "week" && (
-          <div className="slide-in" style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8 }}>
+          <div className="week-grid slide-in">
             {DAYS.map((day, i) => (
-              <div key={i} className="day-col" onClick={() => { setSelectedDay(i); setView("day"); }} style={{
+              <div key={i} className="day-col week-day-col" onClick={() => { setSelectedDay(i); setView("day"); }} style={{
                 background: i === todayIndex ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)",
                 borderRadius: 16, padding: "12px 8px",
                 border: i === todayIndex ? "1px solid rgba(255,255,255,0.2)" : "1px solid rgba(255,255,255,0.05)",
@@ -661,7 +706,7 @@ function App() {
 
       {/* FAB */}
       <button className="btn-pulse" onClick={() => openModal(selectedDay)} style={{
-        position: "fixed", bottom: 28, right: 24,
+        position: "fixed", bottom: "calc(28px + env(safe-area-inset-bottom))", right: 24,
         background: `linear-gradient(135deg, ${currentUser.color}, ${currentUser.color}bb)`,
         color: "#fff", border: "none", borderRadius: "50%",
         width: 60, height: 60, fontSize: 28, cursor: "pointer",
@@ -671,7 +716,7 @@ function App() {
 
       {/* Label manager knop */}
       <button onClick={() => setShowLabelManager(true)} style={{
-        position: "fixed", bottom: 28, left: 24,
+        position: "fixed", bottom: "calc(28px + env(safe-area-inset-bottom))", left: 24,
         background: "rgba(255,255,255,0.08)", color: "#fff",
         border: "1px solid rgba(255,255,255,0.15)", borderRadius: "50%",
         width: 50, height: 50, fontSize: 20, cursor: "pointer",
