@@ -59,7 +59,7 @@
     .color-swatch.selected { border-color: #fff; transform: scale(1.15); }
     input::placeholder { color: rgba(255,255,255,0.3); }
 
-    /* Week weergave: scrollbaar op mobiel, grid op desktop */
+    /* Week weergave: verticale lijst op mobiel, grid op desktop */
     .week-grid {
       display: grid;
       grid-template-columns: repeat(7, 1fr);
@@ -68,17 +68,29 @@
     @media (max-width: 600px) {
       .week-grid {
         display: flex;
-        overflow-x: auto;
+        flex-direction: column;
         gap: 8px;
-        padding-bottom: 8px;
-        scroll-snap-type: x mandatory;
-        -webkit-overflow-scrolling: touch;
       }
-      .week-grid::-webkit-scrollbar { display: none; }
       .week-day-col {
-        flex: 0 0 calc(50vw - 24px);
-        scroll-snap-align: start;
-        min-width: 130px;
+        width: 100%;
+        min-height: auto !important;
+      }
+      /* Op mobiel toon dag-inhoud naast het datum blokje */
+      .week-day-col .day-inner {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      .week-day-col .day-date {
+        text-align: center;
+        min-width: 44px;
+        flex-shrink: 0;
+      }
+      .week-day-col .day-tasks {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
       }
     }
   </style>
@@ -600,28 +612,31 @@ function App() {
             {DAYS.map((day, i) => (
               <div key={i} className="day-col week-day-col" onClick={() => { setSelectedDay(i); setView("day"); }} style={{
                 background: i === todayIndex ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)",
-                borderRadius: 16, padding: "12px 8px",
+                borderRadius: 16, padding: "12px",
                 border: i === todayIndex ? "1px solid rgba(255,255,255,0.2)" : "1px solid rgba(255,255,255,0.05)",
                 cursor: "pointer", minHeight: 160,
               }}>
-                <div style={{ textAlign: "center", marginBottom: 10 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.5, textTransform: "uppercase", letterSpacing: 1 }}>{day}</div>
-                  <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "'Space Mono', monospace", color: i === todayIndex ? "#FF6B6B" : "inherit" }}>{weekDates[i].getDate()}</div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  {tasksByDay(i).slice(0, 3).map(t => {
-                    const u = allUsers.find(u => u.id == t.userId) || { color: "#888" };
-                    const c = categories.find(c => c.id === t.category) || { icon: "🏷️" };
-                    return (
-                      <div key={t.id} style={{
-                        background: u.color + "22", borderLeft: `3px solid ${u.color}`,
-                        borderRadius: "0 6px 6px 0", padding: "4px 6px",
-                        fontSize: 10, fontWeight: 600, opacity: t.done ? 0.4 : 1,
-                        overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", color: "#f0f0f0",
-                      }}>{c.icon} {t.title}</div>
-                    );
-                  })}
-                  {tasksByDay(i).length > 3 && <div style={{ fontSize: 10, opacity: 0.4, textAlign: "center" }}>+{tasksByDay(i).length - 3} meer</div>}
+                <div className="day-inner">
+                  <div className="day-date" style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.5, textTransform: "uppercase", letterSpacing: 1 }}>{day}</div>
+                    <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "'Space Mono', monospace", color: i === todayIndex ? "#FF6B6B" : "inherit" }}>{weekDates[i].getDate()}</div>
+                  </div>
+                  <div className="day-tasks" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {tasksByDay(i).slice(0, 5).map(t => {
+                      const u = allUsers.find(u => u.id == t.userId) || { color: "#888" };
+                      const c = categories.find(c => c.id === t.category) || { icon: "🏷️" };
+                      return (
+                        <div key={t.id} style={{
+                          background: u.color + "22", borderLeft: `3px solid ${u.color}`,
+                          borderRadius: "0 6px 6px 0", padding: "4px 6px",
+                          fontSize: 11, fontWeight: 600, opacity: t.done ? 0.4 : 1,
+                          overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", color: "#f0f0f0",
+                        }}>{c.icon} {t.title}</div>
+                      );
+                    })}
+                    {tasksByDay(i).length > 5 && <div style={{ fontSize: 10, opacity: 0.4 }}>+{tasksByDay(i).length - 5} meer</div>}
+                    {tasksByDay(i).length === 0 && <div style={{ fontSize: 11, opacity: 0.25, fontStyle: "italic" }}>Vrij</div>}
+                  </div>
                 </div>
               </div>
             ))}
