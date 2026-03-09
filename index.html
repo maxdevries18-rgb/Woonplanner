@@ -17,6 +17,12 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* Voorkom horizontaal scrollen op mobiel */
+    html, body {
+      overflow-x: hidden;
+      max-width: 100vw;
+    }
+
     /* Fix witte balk boven en onder op iPhone webapp */
     html {
       background: #1a1a2e;
@@ -326,15 +332,18 @@ function LoginScreen({ onLogin }) {
 
 // ─── TaskCard ─────────────────────────────────────────────────────────────────
 function TaskCard({ task, onToggle, onDelete, showDay, categories, allUsers }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const u = allUsers.find(u => u.id == task.userId) || { color: "#888", username: "?" };
   const c = categories.find(c => c.id === task.category) || { icon: "🏷️", label: task.category };
   const weekDates = getWeekDates();
   return (
     <div className="task-card" style={{
       background: `linear-gradient(135deg, ${u.color}11, ${u.color}06)`,
-      border: `1px solid ${u.color}33`, borderLeft: `4px solid ${u.color}`,
+      border: confirmDelete ? "1px solid rgba(255,80,80,0.4)" : `1px solid ${u.color}33`,
+      borderLeft: `4px solid ${confirmDelete ? "#FF6B6B" : u.color}`,
       borderRadius: 14, padding: "14px 16px",
       display: "flex", alignItems: "center", gap: 12, opacity: task.done ? 0.55 : 1,
+      transition: "border 0.2s",
     }}>
       <button onClick={() => onToggle(task.id, task.done)} style={{
         width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
@@ -347,18 +356,35 @@ function TaskCard({ task, onToggle, onDelete, showDay, categories, allUsers }) {
         <div style={{ fontWeight: 700, fontSize: 14, color: "#f0f0f0", textDecoration: task.done ? "line-through" : "none" }}>
           {c.icon} {task.title}
         </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 11, background: u.color + "22", color: u.color, borderRadius: 6, padding: "2px 8px", fontWeight: 700 }}>
-            {u.username[0]?.toUpperCase()} {u.username}
-          </span>
-          {showDay && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", padding: "2px 0" }}>{DAYS[task.dayIndex]} {formatDate(weekDates[task.dayIndex])}</span>}
-          {task.deadline && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", padding: "2px 0" }}>{task.deadline === "hele_dag" ? "🌅 Hele dag" : `🕐 ${task.deadline}`}</span>}
-        </div>
+        {confirmDelete ? (
+          <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+            <button onClick={() => onDelete(task.id)} style={{
+              background: "rgba(255,80,80,0.25)", border: "1px solid rgba(255,80,80,0.4)",
+              borderRadius: 8, padding: "4px 12px", color: "#FF6B6B",
+              fontSize: 12, fontWeight: 700, cursor: "pointer",
+            }}>Ja, verwijder</button>
+            <button onClick={() => setConfirmDelete(false)} style={{
+              background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 8, padding: "4px 12px", color: "rgba(255,255,255,0.5)",
+              fontSize: 12, fontWeight: 700, cursor: "pointer",
+            }}>Annuleer</button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, background: u.color + "22", color: u.color, borderRadius: 6, padding: "2px 8px", fontWeight: 700 }}>
+              {u.username[0]?.toUpperCase()} {u.username}
+            </span>
+            {showDay && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", padding: "2px 0" }}>{DAYS[task.dayIndex]} {formatDate(weekDates[task.dayIndex])}</span>}
+            {task.deadline && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", padding: "2px 0" }}>{task.deadline === "hele_dag" ? "🌅 Hele dag" : `🕐 ${task.deadline}`}</span>}
+          </div>
+        )}
       </div>
-      <button onClick={() => onDelete(task.id)} style={{
-        background: "rgba(255,255,255,0.05)", border: "none", borderRadius: 8,
-        padding: "6px 8px", cursor: "pointer", color: "rgba(255,255,255,0.3)", fontSize: 14,
-      }}>✕</button>
+      {!confirmDelete && (
+        <button onClick={() => setConfirmDelete(true)} style={{
+          background: "rgba(255,255,255,0.05)", border: "none", borderRadius: 8,
+          padding: "6px 8px", cursor: "pointer", color: "rgba(255,255,255,0.3)", fontSize: 14,
+        }}>✕</button>
+      )}
     </div>
   );
 }
