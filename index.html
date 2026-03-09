@@ -80,11 +80,11 @@ const LABEL_ICONS = ["🏷️","🧹","📅","💼","⚽","🎨","🎵","🍕","
 const DAYS = ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"];
 const DAYS_FULL = ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"];
 
-function getWeekDates() {
+function getWeekDates(weekOffset = 0) {
   const now = new Date();
   const day = now.getDay();
   const monday = new Date(now);
-  monday.setDate(now.getDate() - ((day + 6) % 7));
+  monday.setDate(now.getDate() - ((day + 6) % 7) + weekOffset * 7);
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
@@ -92,12 +92,20 @@ function getWeekDates() {
   });
 }
 
+function getWeekNumber(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return { week: Math.ceil((((d - yearStart) / 86400000) + 1) / 7), year: d.getUTCFullYear() };
+}
+
 function formatDate(d) {
   return `${d.getDate()} ${["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"][d.getMonth()]}`;
 }
 
 function normalizeTask(t) {
-  return { id: t.id, title: t.title, userId: t.user_id, category: t.category, dayIndex: t.day_index, done: t.done, deadline: t.deadline || "" };
+  return { id: t.id, title: t.title, userId: t.user_id, category: t.category, dayIndex: t.day_index, done: t.done, deadline: t.deadline || "", weekMonday: t.week_monday || null };
 }
 
 // ─── Login scherm ─────────────────────────────────────────────────────────────
@@ -313,9 +321,10 @@ function App() {
   const [showLabelManager, setShowLabelManager] = useState(false);
   const [newLabel, setNewLabel] = useState({ label: "", icon: "🏷️" });
   const [form, setForm] = useState({ title: "", category: DEFAULT_CATEGORIES[0].id, dayIndex: 0, deadline: "hele_dag" });
+  const [weekOffset, setWeekOffset] = useState(0);
 
-  const weekDates = getWeekDates();
-  const todayIndex = (() => { const d = new Date().getDay(); return d === 0 ? 6 : d - 1; })();
+  const weekDates = getWeekDates(weekOffset);
+  const todayIndex = weekOffset === 0 ? (() => { const d = new Date().getDay(); return d === 0 ? 6 : d - 1; })() : -1;
 
   // Herstel sessie bij laden
   useEffect(() => {
@@ -369,7 +378,14 @@ function App() {
     setTasks([]);
   }
 
-  const filtered = tasks.filter(t => filterUser === "all" || t.userId == filterUser);
+  // Maandag van de zichtbare week als ISO string (voor filteren)
+  const currentMonday = weekDates[0].toISOString().split('T')[0];
+
+  const filtered = tasks.filter(t => {
+    const matchUser = filterUser === "all" || t.userId == filterUser;
+    const matchWeek = t.weekMonday === currentMonday;
+    return matchUser && matchWeek;
+  });
 
   async function toggleDone(id, currentDone) {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !currentDone } : t));
@@ -391,6 +407,7 @@ function App() {
         title: form.title, user_id: currentUser.id,
         category: form.category, day_index: form.dayIndex,
         done: false, deadline: form.deadline || '',
+        week_monday: currentMonday,
       }]).select().single();
       if (error) throw error;
       setTasks(prev => [...prev, normalizeTask(data)]);
@@ -460,7 +477,22 @@ function App() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
             <div>
               <h1 style={{ fontSize: 22, fontWeight: 900, letterSpacing: -1, fontFamily: "'Space Mono', monospace" }}>🏠 WoonPlanner</h1>
-              <p style={{ fontSize: 11, opacity: 0.4, marginTop: 2 }}>Week van {formatDate(weekDates[0])} — {formatDate(weekDates[6])} <span style={{ color: "#4ECDC4" }}>● live</span></p>
+              {/* Week navigator */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+                <button onClick={() => setWeekOffset(o => o - 1)} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 8, width: 28, height: 28, color: "#fff", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>‹</button>
+                <div style={{ textAlign: "center" }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: weekOffset === 0 ? "#4ECDC4" : "rgba(255,255,255,0.6)" }}>
+                    {weekOffset === 0 ? "Deze week" : weekOffset === 1 ? "Volgende week" : weekOffset === -1 ? "Vorige week" : `Week ${getWeekNumber(weekDates[0]).week}`}
+                    {" "}
+                    <span style={{ opacity: 0.5, fontWeight: 400 }}>({formatDate(weekDates[0])} – {formatDate(weekDates[6])})</span>
+                  </span>
+                </div>
+                <button onClick={() => setWeekOffset(o => o + 1)} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 8, width: 28, height: 28, color: "#fff", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>›</button>
+                {weekOffset !== 0 && (
+                  <button onClick={() => setWeekOffset(0)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "3px 8px", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>Vandaag</button>
+                )}
+                <span style={{ fontSize: 11, color: "#4ECDC4", marginLeft: 2 }}>● live</span>
+              </div>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               {/* User filter knoppen */}
