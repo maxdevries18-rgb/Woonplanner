@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WoonPlanner 🏠</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); min-height: 100vh; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+    .task-card { transition: all 0.2s ease; }
+    .task-card:hover { transform: translateY(-2px); }
+    .day-col { transition: all 0.2s; }
+    .day-col:hover { background: rgba(255,255,255,0.07) !important; }
+    .btn-pulse { animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,107,107,0.4); } 50% { box-shadow: 0 0 0 8px rgba(255,107,107,0); } }
+    .slide-in { animation: slideIn 0.3s ease; }
+    @keyframes slideIn { from { opacity:0; transform: translateY(-10px); } to { opacity:1; transform: translateY(0); } }
+    .notif { animation: notifIn 0.3s ease; }
+    @keyframes notifIn { from { opacity:0; transform: translateX(100px); } to { opacity:1; transform: translateX(0); } }
+    input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.5; }
+    .spinner { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.1); border-top-color: #FF6B6B; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+// Supabase configuratie
+const SUPABASE_URL = 'https://rywkfqjatnrrmsuhupai.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_fhfWC4TvyS_uZAF1NDiPYg_bGtebyQ5';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const USERS = [
+  { id: "user1", name: "Jij", color: "#FF6B6B", emoji: "🧡" },
+  { id: "user2", name: "Huisgenoot", color: "#4ECDC4", emoji: "💙" },
+];
+
+const DEFAULT_CATEGORIES = [
+  { id: "household", label: "Huishouden", icon: "🧹" },
+  { id: "appointment", label: "Afspraken", icon: "📅" },
+  { id: "work", label: "Werk/Studie", icon: "💼" },
+  { id: "sport", label: "Sport & Hobby", icon: "⚽" },
+];
+
+const TIME_OPTIONS = [
+  { value: "hele_dag", label: "🌅 Hele dag" },
+  { value: "07:00", label: "07:00" }, { value: "07:30", label: "07:30" },
+  { value: "08:00", label: "08:00" }, { value: "08:30", label: "08:30" },
+  { value: "09:00", label: "09:00" }, { value: "09:30", label: "09:30" },
+  { value: "10:00", label: "10:00" }, { value: "10:30", label: "10:30" },
+  { value: "11:00", label: "11:00" }, { value: "11:30", label: "11:30" },
+  { value: "12:00", label: "12:00" }, { value: "12:30", label: "12:30" },
+  { value: "13:00", label: "13:00" }, { value: "13:30", label: "13:30" },
+  { value: "14:00", label: "14:00" }, { value: "14:30", label: "14:30" },
+  { value: "15:00", label: "15:00" }, { value: "15:30", label: "15:30" },
+  { value: "16:00", label: "16:00" }, { value: "16:30", label: "16:30" },
+  { value: "17:00", label: "17:00" }, { value: "17:30", label: "17:30" },
+  { value: "18:00", label: "18:00" }, { value: "18:30", label: "18:30" },
+  { value: "19:00", label: "19:00" }, { value: "19:30", label: "19:30" },
+  { value: "20:00", label: "20:00" }, { value: "20:30", label: "20:30" },
+  { value: "21:00", label: "21:00" }, { value: "21:30", label: "21:30" },
+  { value: "22:00", label: "22:00" }, { value: "22:30", label: "22:30" },
+];
+
+const LABEL_ICONS = ["🏷️","🧹","📅","💼","⚽","🎨","🎵","🍕","💪","📚","🚗","🐶","🌿","🛒","💊","🎮","✈️","💰","🏠","👥"];
+
+const DAYS = ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"];
+const DAYS_FULL = ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"];
+
+function getWeekDates() {
+  const now = new Date();
+  const day = now.getDay();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((day + 6) % 7));
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+}
+
+function formatDate(d) {
+  return `${d.getDate()} ${["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"][d.getMonth()]}`;
+}
+
+// Normalize Supabase row naar app formaat
+function normalizeTask(t) {
+  return {
+    id: t.id,
+    title: t.title,
+    userId: t.user_id,
+    category: t.category,
+    dayIndex: t.day_index,
+    done: t.done,
+    deadline: t.deadline || "",
+  };
+}
+
+function TaskCard({ task, onToggle, onDelete, showDay, categories }) {
+  const u = USERS.find(u => u.id === task.userId);
+  const c = categories.find(c => c.id === task.category) || { icon: "🏷️", label: task.category };
+  const weekDates = getWeekDates();
+  return (
+    <div className="task-card" style={{
+      background: `linear-gradient(135deg, ${u.color}11, ${u.color}06)`,
+      border: `1px solid ${u.color}33`,
+      borderLeft: `4px solid ${u.color}`,
+      borderRadius: 14, padding: "14px 16px",
+      display: "flex", alignItems: "center", gap: 12,
+      opacity: task.done ? 0.55 : 1,
+    }}>
+      <button onClick={() => onToggle(task.id, task.done)} style={{
+        width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+        background: task.done ? u.color : "transparent",
+        border: `2px solid ${u.color}`, cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 14, color: "#fff", transition: "all 0.2s",
+      }}>{task.done ? "✓" : ""}</button>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: "#f0f0f0", textDecoration: task.done ? "line-through" : "none" }}>
+          {c.icon} {task.title}
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, background: u.color + "22", color: u.color, borderRadius: 6, padding: "2px 8px", fontWeight: 700 }}>
+            {u.emoji} {u.name}
+          </span>
+          {showDay && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", padding: "2px 0" }}>{DAYS[task.dayIndex]} {formatDate(weekDates[task.dayIndex])}</span>}
+          {task.deadline && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", padding: "2px 0" }}>{task.deadline === "hele_dag" ? "🌅 Hele dag" : `🕐 ${task.deadline}`}</span>}
+        </div>
+      </div>
+      <button onClick={() => onDelete(task.id)} style={{
+        background: "rgba(255,255,255,0.05)", border: "none", borderRadius: 8,
+        padding: "6px 8px", cursor: "pointer", color: "rgba(255,255,255,0.3)", fontSize: 14,
+      }}>✕</button>
+    </div>
+  );
+}
+
+function App() {
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [view, setView] = useState("week");
+  const [selectedDay, setSelectedDay] = useState(() => {
+    const d = new Date().getDay();
+    return d === 0 ? 6 : d - 1;
+  });
+  const [showModal, setShowModal] = useState(false);
+  const [notification, setNotification] = useState(null);
+  const [filterUser, setFilterUser] = useState("all");
+  const [saving, setSaving] = useState(false);
+
+  // Dynamic categories stored in localStorage
+  const [categories, setCategories] = useState(() => {
+    try { const s = localStorage.getItem("woonplanner_categories"); return s ? JSON.parse(s) : DEFAULT_CATEGORIES; }
+    catch { return DEFAULT_CATEGORIES; }
+  });
+  const [showLabelManager, setShowLabelManager] = useState(false);
+  const [newLabel, setNewLabel] = useState({ label: "", icon: "🏷️" });
+
+  // Form - dayIndex defaults to currently selected day
+  const [form, setForm] = useState({ title: "", userId: "user1", category: categories[0]?.id || "household", dayIndex: 0, deadline: "hele_dag" });
+
+  const weekDates = getWeekDates();
+  const todayIndex = (() => { const d = new Date().getDay(); return d === 0 ? 6 : d - 1; })();
+
+  // Taken laden uit Supabase
+  const loadTasks = useCallback(async () => {
+    try {
+      setError(null);
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      setTasks(data.map(normalizeTask));
+    } catch (e) {
+      setError('Verbinding met database mislukt: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadTasks(); }, [loadTasks]);
+
+  // Auto-refresh every 30 seconds so huisgenoot changes appear
+  useEffect(() => {
+    const interval = setInterval(loadTasks, 30000);
+    return () => clearInterval(interval);
+  }, [loadTasks]);
+
+  useEffect(() => {
+    try { localStorage.setItem("woonplanner_categories", JSON.stringify(categories)); } catch {}
+  }, [categories]);
+
+  const filtered = tasks.filter(t => filterUser === "all" || t.userId === filterUser);
+
+  async function toggleDone(id, currentDone) {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !currentDone } : t));
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ done: !currentDone })
+        .eq('id', id);
+      if (error) throw error;
+      if (!currentDone) showNotif("✅ Afgevinkt!", "");
+    } catch {
+      setTasks(prev => prev.map(t => t.id === id ? { ...t, done: currentDone } : t));
+      showNotif("❌ Mislukt", "Probeer het opnieuw");
+    }
+  }
+
+  async function addTask() {
+    if (!form.title.trim()) return;
+    setSaving(true);
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert([{
+          title: form.title,
+          user_id: form.userId,
+          category: form.category,
+          day_index: form.dayIndex,
+          done: false,
+          deadline: form.deadline || '',
+        }])
+        .select()
+        .single();
+      if (error) throw error;
+      setTasks(prev => [...prev, normalizeTask(data)]);
+      showNotif("🎉 Toegevoegd!", form.title);
+      setShowModal(false);
+      setForm({ title: "", userId: "user1", category: categories[0]?.id || "household", dayIndex: selectedDay, deadline: "hele_dag" });
+    } catch {
+      showNotif("❌ Mislukt", "Taak kon niet worden opgeslagen");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openModal(dayIndex) {
+    setForm(f => ({ ...f, dayIndex, title: "", deadline: "hele_dag" }));
+    setShowModal(true);
+  }
+
+  function addLabel() {
+    if (!newLabel.label.trim()) return;
+    const id = "custom_" + Date.now();
+    setCategories(prev => [...prev, { id, label: newLabel.label.trim(), icon: newLabel.icon }]);
+    setNewLabel({ label: "", icon: "🏷️" });
+  }
+
+  function deleteLabel(id) {
+    setCategories(prev => prev.filter(c => c.id !== id));
+  }
+
+  async function deleteTask(id) {
+    setTasks(prev => prev.filter(t => t.id !== id));
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    } catch {
+      showNotif("❌ Mislukt", "Taak kon niet worden verwijderd");
+      loadTasks();
+    }
+  }
+
+  function showNotif(title, body) {
+    setNotification({ title, body });
+    setTimeout(() => setNotification(null), 3000);
+  }
+
+  const tasksByDay = (i) => filtered.filter(t => t.dayIndex === i);
+
+  if (loading) return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", gap: 20 }}>
+      <div className="spinner"></div>
+      <p style={{ color: "rgba(255,255,255,0.5)", fontFamily: "'DM Sans', sans-serif" }}>Taken laden...</p>
+    </div>
+  );
+
+  if (error) return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", gap: 16, padding: 32, textAlign: "center" }}>
+      <div style={{ fontSize: 48 }}>⚠️</div>
+      <p style={{ color: "#FF6B6B", fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 18 }}>Database niet bereikbaar</p>
+      <p style={{ color: "rgba(255,255,255,0.4)", fontFamily: "'DM Sans', sans-serif", fontSize: 14 }}>{error}</p>
+      <button onClick={loadTasks} style={{ background: "#FF6B6B", color: "#fff", border: "none", borderRadius: 12, padding: "12px 24px", cursor: "pointer", fontWeight: 700, fontSize: 15 }}>Opnieuw proberen</button>
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight: "100vh", fontFamily: "'DM Sans', 'Segoe UI', sans-serif", color: "#f0f0f0", paddingBottom: 80 }}>
+
+      {notification && (
+        <div className="notif" style={{
+          position: "fixed", top: 20, right: 20, zIndex: 9999,
+          background: "linear-gradient(135deg, #2d2d5e, #3d3d7e)",
+          border: "1px solid rgba(255,255,255,0.15)", borderRadius: 16,
+          padding: "14px 20px", boxShadow: "0 20px 60px rgba(0,0,0,0.5)", maxWidth: 280,
+        }}>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>{notification.title}</div>
+          {notification.body && <div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>{notification.body}</div>}
+        </div>
+      )}
+
+      {/* Header */}
+      <div style={{
+        padding: "28px 20px 16px",
+        background: "rgba(255,255,255,0.03)",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        backdropFilter: "blur(10px)",
+        position: "sticky", top: 0, zIndex: 100,
+      }}>
+        <div style={{ maxWidth: 900, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h1 style={{ fontSize: 26, fontWeight: 900, letterSpacing: -1, fontFamily: "'Space Mono', monospace" }}>🏠 WoonPlanner</h1>
+              <p style={{ fontSize: 12, opacity: 0.5, marginTop: 2 }}>
+                Week van {formatDate(weekDates[0])} — {formatDate(weekDates[6])}
+                <span style={{ marginLeft: 8, color: "#4ECDC4" }}>● live</span>
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {[{ id: "all", name: "Iedereen", color: "#888", emoji: "👥" }, ...USERS].map(u => (
+                <button key={u.id} onClick={() => setFilterUser(u.id)} style={{
+                  background: filterUser === u.id ? (u.color || "#555") : "rgba(255,255,255,0.06)",
+                  color: "#fff", border: "none", borderRadius: 20, padding: "6px 14px",
+                  fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all 0.2s",
+                  opacity: filterUser === u.id ? 1 : 0.6,
+                }}>{u.emoji} {u.name}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 4, background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: 4, width: "fit-content" }}>
+            {[{ id: "week", label: "📅 Week" }, { id: "day", label: "🌤 Dag" }, { id: "tasks", label: "📋 Taken" }].map(v => (
+              <button key={v.id} onClick={() => setView(v.id)} style={{
+                background: view === v.id ? "rgba(255,255,255,0.15)" : "transparent",
+                color: view === v.id ? "#fff" : "rgba(255,255,255,0.5)",
+                border: "none", borderRadius: 8, padding: "7px 16px",
+                fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s",
+              }}>{v.label}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Main */}
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "20px 16px" }}>
+
+        {/* WEEK VIEW */}
+        {view === "week" && (
+          <div className="slide-in" style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8 }}>
+            {DAYS.map((day, i) => (
+              <div key={i} className="day-col" onClick={() => { setSelectedDay(i); setView("day"); }} style={{
+                background: i === todayIndex ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)",
+                borderRadius: 16, padding: "12px 8px",
+                border: i === todayIndex ? "1px solid rgba(255,255,255,0.2)" : "1px solid rgba(255,255,255,0.05)",
+                cursor: "pointer", minHeight: 160,
+              }}>
+                <div style={{ textAlign: "center", marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.5, textTransform: "uppercase", letterSpacing: 1 }}>{day}</div>
+                  <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "'Space Mono', monospace", color: i === todayIndex ? "#FF6B6B" : "inherit" }}>{weekDates[i].getDate()}</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {tasksByDay(i).slice(0, 3).map(t => {
+                    const u = USERS.find(u => u.id === t.userId);
+                    const c = categories.find(c => c.id === t.category) || { icon: "🏷️" };
+                    return (
+                      <div key={t.id} style={{
+                        background: u.color + "22", borderLeft: `3px solid ${u.color}`,
+                        borderRadius: "0 6px 6px 0", padding: "4px 6px",
+                        fontSize: 10, fontWeight: 600, opacity: t.done ? 0.4 : 1,
+                        overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", color: "#f0f0f0",
+                      }}>{c.icon} {t.title}</div>
+                    );
+                  })}
+                  {tasksByDay(i).length > 3 && <div style={{ fontSize: 10, opacity: 0.4, textAlign: "center" }}>+{tasksByDay(i).length - 3} meer</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* DAY VIEW */}
+        {view === "day" && (
+          <div className="slide-in">
+            <div style={{ display: "flex", gap: 6, marginBottom: 20, overflowX: "auto", paddingBottom: 4 }}>
+              {DAYS.map((d, i) => (
+                <button key={i} onClick={() => setSelectedDay(i)} style={{
+                  background: selectedDay === i ? (i === todayIndex ? "#FF6B6B" : "rgba(255,255,255,0.15)") : "rgba(255,255,255,0.04)",
+                  border: "none", borderRadius: 12, padding: "8px 16px",
+                  color: selectedDay === i ? "#fff" : "rgba(255,255,255,0.5)",
+                  cursor: "pointer", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap", flexShrink: 0,
+                }}>{d} {weekDates[i].getDate()}</button>
+              ))}
+            </div>
+            <h2 style={{ fontSize: 22, fontWeight: 900, marginBottom: 16, fontFamily: "'Space Mono', monospace" }}>
+              {DAYS_FULL[selectedDay]} <span style={{ opacity: 0.4, fontWeight: 400, fontSize: 16 }}>{formatDate(weekDates[selectedDay])}</span>
+            </h2>
+            {tasksByDay(selectedDay).length === 0 ? (
+              <div style={{ textAlign: "center", padding: "60px 20px", opacity: 0.3 }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>😴</div>
+                <div style={{ fontSize: 16, fontWeight: 600 }}>Niks gepland!</div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {tasksByDay(selectedDay).sort((a, b) => a.deadline.localeCompare(b.deadline)).map(t => (
+                  <TaskCard key={t.id} task={t} onToggle={toggleDone} onDelete={deleteTask} categories={categories} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TASKS VIEW */}
+        {view === "tasks" && (
+          <div className="slide-in">
+            {categories.map(c => {
+              const catTasks = filtered.filter(t => t.category === c.id);
+              if (!catTasks.length) return null;
+              return (
+                <div key={c.id} style={{ marginBottom: 28 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, opacity: 0.7, letterSpacing: 1, textTransform: "uppercase" }}>
+                    {c.icon} {c.label}
+                    <span style={{ background: "rgba(255,255,255,0.1)", borderRadius: 20, padding: "2px 8px", fontSize: 11, marginLeft: 8 }}>{catTasks.length}</span>
+                  </h3>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {catTasks.sort((a, b) => a.dayIndex - b.dayIndex).map(t => (
+                      <TaskCard key={t.id} task={t} onToggle={toggleDone} onDelete={deleteTask} showDay categories={categories} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div style={{ textAlign: "center", padding: "60px 20px", opacity: 0.3 }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>📭</div>
+                <div style={{ fontSize: 16, fontWeight: 600 }}>Geen taken gevonden</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Stats */}
+        <div style={{ marginTop: 32, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+          {[
+            { label: "Totaal", value: filtered.length, icon: "📋", color: "#7c7cff" },
+            { label: "Gedaan", value: filtered.filter(t => t.done).length, icon: "✅", color: "#4ECDC4" },
+            { label: "Open", value: filtered.filter(t => !t.done).length, icon: "⏳", color: "#FF6B6B" },
+          ].map(s => (
+            <div key={s.label} style={{
+              background: "rgba(255,255,255,0.04)", borderRadius: 16,
+              padding: "16px 20px", border: "1px solid rgba(255,255,255,0.06)", textAlign: "center",
+            }}>
+              <div style={{ fontSize: 24, marginBottom: 4 }}>{s.icon}</div>
+              <div style={{ fontSize: 28, fontWeight: 900, fontFamily: "'Space Mono', monospace", color: s.color }}>{s.value}</div>
+              <div style={{ fontSize: 12, opacity: 0.5, marginTop: 2, fontWeight: 600 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* FAB */}
+      <button className="btn-pulse" onClick={() => openModal(selectedDay)} style={{
+        position: "fixed", bottom: 28, right: 24,
+        background: "linear-gradient(135deg, #FF6B6B, #ee5a24)",
+        color: "#fff", border: "none", borderRadius: "50%",
+        width: 60, height: 60, fontSize: 28, cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontWeight: 900, zIndex: 200,
+      }}>+</button>
+
+      {/* Label manager button */}
+      <button onClick={() => setShowLabelManager(true)} style={{
+        position: "fixed", bottom: 28, left: 24,
+        background: "rgba(255,255,255,0.08)",
+        color: "#fff", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "50%",
+        width: 50, height: 50, fontSize: 20, cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200,
+      }}>🏷️</button>
+
+      {/* Modal - nieuwe taak */}
+      {showModal && (
+        <div onClick={() => setShowModal(false)} style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+          display: "flex", alignItems: "flex-end", justifyContent: "center",
+          zIndex: 500, backdropFilter: "blur(4px)",
+        }}>
+          <div className="slide-in" onClick={e => e.stopPropagation()} style={{
+            background: "linear-gradient(180deg, #1e1e3f, #16163a)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: "24px 24px 0 0", padding: "28px 24px 40px",
+            width: "100%", maxWidth: 500, maxHeight: "90vh", overflowY: "auto",
+          }}>
+            <h3 style={{ fontSize: 20, fontWeight: 900, marginBottom: 20, color: "#f0f0f0", fontFamily: "'Space Mono', monospace" }}>➕ Nieuwe taak</h3>
+
+            <input
+              placeholder="Wat moet er gebeuren?"
+              value={form.title}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              onKeyDown={e => e.key === "Enter" && addTask()}
+              style={{
+                width: "100%", background: "rgba(255,255,255,0.07)",
+                border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12,
+                padding: "14px 16px", color: "#fff", fontSize: 15,
+                marginBottom: 16, outline: "none",
+              }}
+            />
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+              <div>
+                <label style={{ fontSize: 11, opacity: 0.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 6, color: "#fff" }}>Voor wie</label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {USERS.map(u => (
+                    <button key={u.id} onClick={() => setForm(f => ({ ...f, userId: u.id }))} style={{
+                      flex: 1, padding: "10px 8px", borderRadius: 10,
+                      background: form.userId === u.id ? u.color : "rgba(255,255,255,0.06)",
+                      color: "#fff", border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12,
+                    }}>{u.emoji} {u.name}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, opacity: 0.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 6, color: "#fff" }}>Tijdstip</label>
+                <select value={form.deadline} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} style={{
+                  width: "100%", background: "#2a2a5a",
+                  border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10,
+                  padding: "10px 12px", color: "#fff", fontSize: 14, outline: "none", cursor: "pointer",
+                }}>
+                  {TIME_OPTIONS.map(t => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, opacity: 0.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 6, color: "#fff" }}>Dag</label>
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                {DAYS.map((d, i) => (
+                  <button key={i} onClick={() => setForm(f => ({ ...f, dayIndex: i }))} style={{
+                    background: form.dayIndex === i ? "rgba(255,107,107,0.4)" : "rgba(255,255,255,0.05)",
+                    color: "#fff", border: form.dayIndex === i ? "1px solid #FF6B6B" : "1px solid transparent",
+                    borderRadius: 8, padding: "6px 10px",
+                    fontSize: 12, fontWeight: 700, cursor: "pointer",
+                  }}>{d} {weekDates[i].getDate()}</button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 11, opacity: 0.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 6, color: "#fff" }}>Label</label>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {categories.map(c => (
+                  <button key={c.id} onClick={() => setForm(f => ({ ...f, category: c.id }))} style={{
+                    background: form.category === c.id ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.05)",
+                    color: "#fff",
+                    border: form.category === c.id ? "1px solid rgba(255,255,255,0.3)" : "1px solid transparent",
+                    borderRadius: 10, padding: "8px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  }}>{c.icon} {c.label}</button>
+                ))}
+              </div>
+            </div>
+
+            <button onClick={addTask} disabled={saving} style={{
+              width: "100%", padding: "16px",
+              background: saving ? "rgba(255,255,255,0.1)" : "linear-gradient(135deg, #FF6B6B, #ee5a24)",
+              color: "#fff", border: "none", borderRadius: 14,
+              fontSize: 16, fontWeight: 800, cursor: saving ? "not-allowed" : "pointer",
+            }}>{saving ? "Opslaan..." : "Taak toevoegen 🚀"}</button>
+          </div>
+        </div>
+      )}
+
+      {/* Label manager modal */}
+      {showLabelManager && (
+        <div onClick={() => setShowLabelManager(false)} style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+          display: "flex", alignItems: "flex-end", justifyContent: "center",
+          zIndex: 500, backdropFilter: "blur(4px)",
+        }}>
+          <div className="slide-in" onClick={e => e.stopPropagation()} style={{
+            background: "linear-gradient(180deg, #1e1e3f, #16163a)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: "24px 24px 0 0", padding: "28px 24px 40px",
+            width: "100%", maxWidth: 500, maxHeight: "90vh", overflowY: "auto",
+          }}>
+            <h3 style={{ fontSize: 20, fontWeight: 900, marginBottom: 6, color: "#f0f0f0", fontFamily: "'Space Mono', monospace" }}>🏷️ Labels beheren</h3>
+            <p style={{ fontSize: 12, opacity: 0.4, marginBottom: 20 }}>Maak je eigen labels aan voor taken</p>
+
+            {/* Existing labels */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
+              {categories.map(c => (
+                <div key={c.id} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: "12px 16px",
+                }}>
+                  <span style={{ fontSize: 15, fontWeight: 600 }}>{c.icon} {c.label}</span>
+                  <button onClick={() => deleteLabel(c.id)} style={{
+                    background: "rgba(255,100,100,0.15)", border: "none", borderRadius: 8,
+                    padding: "4px 10px", cursor: "pointer", color: "#FF6B6B", fontSize: 12, fontWeight: 700,
+                  }}>Verwijder</button>
+                </div>
+              ))}
+            </div>
+
+            {/* Add new label */}
+            <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 20 }}>
+              <label style={{ fontSize: 11, opacity: 0.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 10, color: "#fff" }}>Nieuw label</label>
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                <input
+                  placeholder="Naam van label..."
+                  value={newLabel.label}
+                  onChange={e => setNewLabel(l => ({ ...l, label: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && addLabel()}
+                  style={{
+                    flex: 1, background: "rgba(255,255,255,0.07)",
+                    border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10,
+                    padding: "10px 14px", color: "#fff", fontSize: 14, outline: "none",
+                  }}
+                />
+              </div>
+              <label style={{ fontSize: 11, opacity: 0.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 8, color: "#fff" }}>Kies een icoon</label>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+                {LABEL_ICONS.map(icon => (
+                  <button key={icon} onClick={() => setNewLabel(l => ({ ...l, icon }))} style={{
+                    width: 36, height: 36, borderRadius: 8, fontSize: 18,
+                    background: newLabel.icon === icon ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.05)",
+                    border: newLabel.icon === icon ? "1px solid rgba(255,255,255,0.4)" : "1px solid transparent",
+                    cursor: "pointer",
+                  }}>{icon}</button>
+                ))}
+              </div>
+              <button onClick={addLabel} style={{
+                width: "100%", padding: "14px",
+                background: "linear-gradient(135deg, #4ECDC4, #2ecc71)",
+                color: "#fff", border: "none", borderRadius: 12,
+                fontSize: 15, fontWeight: 800, cursor: "pointer",
+              }}>+ Label toevoegen</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
