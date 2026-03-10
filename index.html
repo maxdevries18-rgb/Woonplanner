@@ -380,7 +380,7 @@ function TaskCard({ task, onToggle, onDelete, onEdit, showDay, categories, allUs
           </div>
         ) : (
           <div style={{ display: "flex", gap: 5, marginTop: 4, flexWrap: "wrap", alignItems: "center" }}>
-            {taskUsers.map(u => <span key={u.id???"all"} style={{ fontSize: 11, background: u.color+"22", color: u.color, borderRadius: 6, padding: "2px 7px", fontWeight: 700 }}>{u.username[0]?.toUpperCase()} {u.username}</span>)}
+            {taskUsers.map(u => <span key={u.id??"all"} style={{ fontSize: 11, background: u.color+"22", color: u.color, borderRadius: 6, padding: "2px 7px", fontWeight: 700 }}>{u.username[0]?.toUpperCase()} {u.username}</span>)}
             {taskTeams.map(t => { const tc=t.color||"#7c7cff"; return <span key={t.id} style={{ fontSize: 11, background: tc+"22", color: tc, borderRadius: 6, padding: "2px 7px", fontWeight: 700 }}>👥 {t.name}</span>; })}
             {showDay && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{DAYS[task.dayIndex]} {formatDate(wd[task.dayIndex])}</span>}
             {task.deadline && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{task.deadline==="hele_dag" ? "🌅 Hele dag" : `🕐 ${task.deadline}`}</span>}
