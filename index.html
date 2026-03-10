@@ -260,6 +260,12 @@ function BeheerScherm({currentUser,onClose,showNotif}) {
     await supabase.from("teams").delete().eq("id",teamId);
     setSelTeam(null); setTeamsMode("overview"); laadAlles(); showNotif("🗑️ Team verwijderd","");
   }
+  async function voegLidToe(teamId,userId) {
+    const bestaand=allMembers.find(m=>m.team_id===teamId&&m.user_id===userId);
+    if(bestaand) return;
+    await supabase.from("team_members").insert([{team_id:teamId,user_id:userId,role:"member",status:"approved"}]);
+    laadAlles(); showNotif("✅ Lid toegevoegd","");
+  }
 
   // ── Gebruikers functies
   async function updateRecht(userId,key,value) {
@@ -443,6 +449,28 @@ function BeheerScherm({currentUser,onClose,showNotif}) {
                     </div>
                   );
                 })}
+
+                {/* Gebruiker toevoegen aan team */}
+                {(()=>{
+                  const teamMemberIds=membersOf(selTeam.id).map(m=>m.user_id);
+                  const nietLeden=allUsers.filter(u=>!teamMemberIds.includes(u.id));
+                  if(nietLeden.length===0) return null;
+                  return (
+                    <div style={{marginTop:16,borderTop:"1px solid rgba(255,255,255,0.08)",paddingTop:14}}>
+                      <span style={sectionLabel}>Lid toevoegen</span>
+                      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                        {nietLeden.map(u=>(
+                          <div key={u.id} style={{display:"flex",alignItems:"center",gap:12,background:"rgba(255,255,255,0.03)",borderRadius:10,padding:"10px 14px"}}>
+                            <div style={{width:28,height:28,borderRadius:"50%",background:u.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,flexShrink:0}}>{u.username[0].toUpperCase()}</div>
+                            <span style={{flex:1,fontWeight:600,fontSize:14,opacity:0.8}}>{u.username}</span>
+                            <button onClick={()=>voegLidToe(selTeam.id,u.id)} style={{background:"rgba(78,205,196,0.15)",border:"1px solid rgba(78,205,196,0.3)",borderRadius:8,padding:"5px 12px",color:"#4ECDC4",cursor:"pointer",fontSize:12,fontWeight:700}}>+ Toevoegen</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {(currentUser.is_admin||currentUser.can_delete_teams)&&<button onClick={()=>verwijderTeam(selTeam.id)} style={{width:"100%",marginTop:16,padding:"12px",background:"rgba(255,80,80,0.12)",border:"1px solid rgba(255,80,80,0.25)",borderRadius:12,color:"#FF6B6B",cursor:"pointer",fontSize:14,fontWeight:700}}>Team verwijderen</button>}
               </div>
             )}
