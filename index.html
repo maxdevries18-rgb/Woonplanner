@@ -8,7 +8,7 @@
   <meta http-equiv="Expires" content="0" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>WoonPlanner 🏠</title>
+  <title>WoonPlanner</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -16,42 +16,13 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    /* Voorkom horizontaal scrollen op mobiel */
-    html, body {
-      overflow-x: hidden;
-      max-width: 100vw;
-    }
-
-    /* Fix witte balk boven en onder op iPhone webapp */
-    html {
-      background: #1a1a2e;
-      height: 100%;
-    }
-    body {
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-      background-attachment: fixed;
-      min-height: 100%;
-      min-height: -webkit-fill-available;
-      /* Voorkom wit vlak bij overscroll */
-      overscroll-behavior: none;
-    }
-    #root {
-      min-height: 100vh;
-      min-height: -webkit-fill-available;
-    }
-
-    /* Safe area padding voor iPhone notch/Dynamic Island */
-    .safe-top { padding-top: env(safe-area-inset-top); }
-    .safe-bottom { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
-
-    ::-webkit-scrollbar { width: 4px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
-    .task-card { transition: all 0.2s ease; }
-    .task-card:hover { transform: translateY(-2px); }
-    .day-col { transition: all 0.2s; }
-    .day-col:hover { background: rgba(255,255,255,0.07) !important; }
+    html, body { overflow-x: hidden; max-width: 100vw; }
+    html { background: #1a1a2e; height: 100%; }
+    body { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); background-attachment: fixed; min-height: 100%; min-height: -webkit-fill-available; overscroll-behavior: none; }
+    #root { min-height: 100vh; min-height: -webkit-fill-available; }
+    ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+    .task-card { transition: all 0.2s ease; } .task-card:hover { transform: translateY(-2px); }
+    .day-col { transition: all 0.2s; } .day-col:hover { background: rgba(255,255,255,0.07) !important; }
     .btn-pulse { animation: pulse 2s infinite; }
     @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,107,107,0.4); } 50% { box-shadow: 0 0 0 8px rgba(255,107,107,0); } }
     .slide-in { animation: slideIn 0.3s ease; }
@@ -61,279 +32,132 @@
     .spinner { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.1); border-top-color: #FF6B6B; border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .color-swatch { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: all 0.15s; }
-    .color-swatch:hover { transform: scale(1.15); }
-    .color-swatch.selected { border-color: #fff; transform: scale(1.15); }
+    .color-swatch:hover { transform: scale(1.15); } .color-swatch.selected { border-color: #fff; transform: scale(1.15); }
     input::placeholder { color: rgba(255,255,255,0.3); }
-
-    /* Week weergave: verticale lijst op mobiel, grid op desktop */
-    .week-grid {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 8px;
-    }
+    .week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
     @media (max-width: 600px) {
-      .week-grid {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-      .week-day-col {
-        width: 100%;
-        min-height: auto !important;
-      }
-      /* Op mobiel toon dag-inhoud naast het datum blokje */
-      .week-day-col .day-inner {
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-      }
-      .week-day-col .day-date {
-        text-align: center;
-        min-width: 44px;
-        flex-shrink: 0;
-      }
-      .week-day-col .day-tasks {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
+      .week-grid { display: flex; flex-direction: column; gap: 8px; }
+      .week-day-col { width: 100%; min-height: auto !important; }
+      .week-day-col .day-inner { display: flex; align-items: flex-start; gap: 12px; }
+      .week-day-col .day-date { text-align: center; min-width: 44px; flex-shrink: 0; }
+      .week-day-col .day-tasks { flex: 1; display: flex; flex-direction: column; gap: 4px; }
     }
   </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useCallback } = React;
-
+const { useState, useEffect, useCallback, useMemo } = React;
 const SUPABASE_URL = 'https://rywkfqjatnrrmsuhupai.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_fhfWC4TvyS_uZAF1NDiPYg_bGtebyQ5';
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-const MAX_USERS = 4;
-
-const USER_COLORS = [
-  "#FF6B6B", "#4ECDC4", "#FFD93D", "#6BCB77",
-  "#4D96FF", "#FF6FC8", "#FF9A3C", "#A78BFA",
-];
-
+const USER_COLORS = ["#FF6B6B","#4ECDC4","#FFD93D","#6BCB77","#4D96FF","#FF6FC8","#FF9A3C","#A78BFA","#F72585","#4CC9F0"];
+const TEAM_COLORS = ["#7c7cff","#FF6B6B","#4ECDC4","#FFD93D","#6BCB77","#FF9A3C","#A78BFA","#FF6FC8"];
 const DEFAULT_CATEGORIES = [
   { id: "household", label: "Huishouden", icon: "🧹" },
   { id: "appointment", label: "Afspraken", icon: "📅" },
   { id: "work", label: "Werk/Studie", icon: "💼" },
   { id: "sport", label: "Sport & Hobby", icon: "⚽" },
 ];
-
-const TIME_OPTIONS = [
-  { value: "hele_dag", label: "🌅 Hele dag" },
-  { value: "07:00", label: "07:00" }, { value: "07:30", label: "07:30" },
-  { value: "08:00", label: "08:00" }, { value: "08:30", label: "08:30" },
-  { value: "09:00", label: "09:00" }, { value: "09:30", label: "09:30" },
-  { value: "10:00", label: "10:00" }, { value: "10:30", label: "10:30" },
-  { value: "11:00", label: "11:00" }, { value: "11:30", label: "11:30" },
-  { value: "12:00", label: "12:00" }, { value: "12:30", label: "12:30" },
-  { value: "13:00", label: "13:00" }, { value: "13:30", label: "13:30" },
-  { value: "14:00", label: "14:00" }, { value: "14:30", label: "14:30" },
-  { value: "15:00", label: "15:00" }, { value: "15:30", label: "15:30" },
-  { value: "16:00", label: "16:00" }, { value: "16:30", label: "16:30" },
-  { value: "17:00", label: "17:00" }, { value: "17:30", label: "17:30" },
-  { value: "18:00", label: "18:00" }, { value: "18:30", label: "18:30" },
-  { value: "19:00", label: "19:00" }, { value: "19:30", label: "19:30" },
-  { value: "20:00", label: "20:00" }, { value: "20:30", label: "20:30" },
-  { value: "21:00", label: "21:00" }, { value: "21:30", label: "21:30" },
-  { value: "22:00", label: "22:00" }, { value: "22:30", label: "22:30" },
-];
-
+const TIME_OPTIONS = [{ value: "hele_dag", label: "🌅 Hele dag" }, ...["07","08","09","10","11","12","13","14","15","16","17","18","19","20","21","22"].flatMap(h => [{ value: `${h}:00`, label: `${h}:00` }, { value: `${h}:30`, label: `${h}:30` }])];
 const LABEL_ICONS = ["🏷️","🧹","📅","💼","⚽","🎨","🎵","🍕","💪","📚","🚗","🐶","🌿","🛒","💊","🎮","✈️","💰","🏠","👥"];
-const DAYS = ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"];
-const DAYS_FULL = ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"];
+const DAYS = ["Ma","Di","Wo","Do","Vr","Za","Zo"];
+const DAYS_FULL = ["Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag","Zondag"];
 
-function getWeekDates(weekOffset = 0) {
+function getWeekDates(off) {
+  off = off || 0;
   const now = new Date();
-  const day = now.getDay();
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - ((day + 6) % 7) + weekOffset * 7);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return d;
-  });
+  const mon = new Date(now);
+  mon.setDate(now.getDate() - ((now.getDay() + 6) % 7) + off * 7);
+  return Array.from({ length: 7 }, (_, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return d; });
 }
-
 function getWeekNumber(date) {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return { week: Math.ceil((((d - yearStart) / 86400000) + 1) / 7), year: d.getUTCFullYear() };
+  const dn = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dn);
+  const ys = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - ys) / 86400000) + 1) / 7);
 }
-
 function formatDate(d) {
-  return `${d.getDate()} ${["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"][d.getMonth()]}`;
+  return d.getDate() + " " + ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"][d.getMonth()];
 }
-
-function normalizeTask(t) {
-  // user_id kan null (iedereen), een getal, of "1,2,3" zijn
+function normalizeTask(t, teamIds) {
   let userIds = null;
-  if (t.user_id !== null && t.user_id !== undefined) {
-    userIds = String(t.user_id).split(',').map(s => parseInt(s)).filter(n => !isNaN(n));
+  if (t.user_id !== null && t.user_id !== undefined && t.user_id !== "") {
+    userIds = String(t.user_id).split(",").map(s => parseInt(s)).filter(n => !isNaN(n));
   }
-  return {
-    id: t.id, title: t.title,
-    userIds, // array van user ids, of null voor iedereen
-    category: t.category, dayIndex: t.day_index,
-    done: t.done, deadline: t.deadline || "",
-    weekMonday: t.week_monday || null
-  };
+  return { id: t.id, title: t.title, userIds, category: t.category, dayIndex: t.day_index, done: t.done, deadline: t.deadline || "", weekMonday: t.week_monday || null, teamIds: teamIds || [] };
 }
 
-// ─── Login scherm ─────────────────────────────────────────────────────────────
+// LOGIN
 function LoginScreen({ onLogin }) {
-  const [mode, setMode] = useState("kies"); // kies | nieuw | inloggen
+  const [mode, setMode] = useState("kies");
   const [username, setUsername] = useState("");
   const [color, setColor] = useState(USER_COLORS[0]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [loadingUsers, setLoadingUsers] = useState(true);
-
-  useEffect(() => {
-    loadUsers();
-  }, []);
-
+  useEffect(() => { loadUsers(); }, []);
   async function loadUsers() {
     setLoadingUsers(true);
-    const { data } = await supabase.from('users').select('*').order('created_at');
+    const { data } = await supabase.from("users").select("*").order("created_at");
     setUsers(data || []);
     setLoadingUsers(false);
   }
-
   async function registreer() {
     if (!username.trim()) return setError("Vul een gebruikersnaam in");
-    if (users.length >= MAX_USERS) return setError(`Maximum van ${MAX_USERS} gebruikers bereikt`);
-    setLoading(true);
-    setError("");
-    // Check of naam al bestaat
-    const { data: bestaand } = await supabase.from('users').select('id').eq('username', username.trim()).single();
-    if (bestaand) { setLoading(false); return setError("Deze naam is al bezet, kies een andere"); }
-    const { data, error } = await supabase.from('users').insert([{ username: username.trim(), color }]).select().single();
-    if (error) { setLoading(false); return setError("Er ging iets mis, probeer opnieuw"); }
+    setLoading(true); setError("");
+    const { data: b } = await supabase.from("users").select("id").eq("username", username.trim()).single();
+    if (b) { setLoading(false); return setError("Deze naam is al bezet"); }
+    const { data, error } = await supabase.from("users").insert([{ username: username.trim(), color }]).select().single();
+    if (error) { setLoading(false); return setError("Er ging iets mis"); }
     localStorage.setItem("woonplanner_user_id", data.id);
-    onLogin(data);
-    setLoading(false);
+    onLogin(data); setLoading(false);
   }
-
-  async function login(user) {
-    localStorage.setItem("woonplanner_user_id", user.id);
-    onLogin(user);
-  }
-
   const takenKleur = users.map(u => u.color);
-  const beschikbareKleuren = USER_COLORS.filter(c => !takenKleur.includes(c));
-
+  const beschikbaar = USER_COLORS.filter(c => !takenKleur.includes(c));
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, fontFamily: "'DM Sans', sans-serif" }}>
       <div className="slide-in" style={{ width: "100%", maxWidth: 420 }}>
-
         <div style={{ textAlign: "center", marginBottom: 40 }}>
           <div style={{ fontSize: 56, marginBottom: 12 }}>🏠</div>
           <h1 style={{ fontSize: 28, fontWeight: 900, color: "#fff", letterSpacing: -1, fontFamily: "'Space Mono', monospace" }}>WoonPlanner</h1>
           <p style={{ color: "rgba(255,255,255,0.4)", marginTop: 8, fontSize: 14 }}>Plan samen je week</p>
         </div>
-
         {mode === "kies" && (
           <div>
-            {loadingUsers ? (
-              <div style={{ display: "flex", justifyContent: "center", padding: 40 }}><div className="spinner" /></div>
-            ) : (
-              <>
+            {loadingUsers ? <div style={{ display: "flex", justifyContent: "center", padding: 40 }}><div className="spinner" /></div> : (
+              <div>
                 {users.length > 0 && (
                   <div style={{ marginBottom: 24 }}>
                     <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>Wie ben jij?</p>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {users.map(u => (
-                        <button key={u.id} onClick={() => login(u)} style={{
-                          background: `linear-gradient(135deg, ${u.color}22, ${u.color}11)`,
-                          border: `1px solid ${u.color}44`,
-                          borderLeft: `4px solid ${u.color}`,
-                          borderRadius: 14, padding: "16px 20px",
-                          color: "#fff", cursor: "pointer", textAlign: "left",
-                          display: "flex", alignItems: "center", gap: 14,
-                          transition: "all 0.2s",
-                        }}>
-                          <div style={{ width: 36, height: 36, borderRadius: "50%", background: u.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 900, color: "#fff", flexShrink: 0 }}>
-                            {u.username[0].toUpperCase()}
-                          </div>
+                        <button key={u.id} onClick={() => { localStorage.setItem("woonplanner_user_id", u.id); onLogin(u); }} style={{ background: `linear-gradient(135deg,${u.color}22,${u.color}11)`, border: `1px solid ${u.color}44`, borderLeft: `4px solid ${u.color}`, borderRadius: 14, padding: "16px 20px", color: "#fff", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 14 }}>
+                          <div style={{ width: 36, height: 36, borderRadius: "50%", background: u.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 900, flexShrink: 0 }}>{u.username[0].toUpperCase()}</div>
                           <span style={{ fontWeight: 700, fontSize: 16 }}>{u.username}</span>
                         </button>
                       ))}
                     </div>
                   </div>
                 )}
-
-                {users.length < MAX_USERS ? (
-                  <button onClick={() => { setColor(beschikbareKleuren[0] || USER_COLORS[0]); setMode("nieuw"); }} style={{
-                    width: "100%", padding: "14px",
-                    background: "rgba(255,255,255,0.06)",
-                    border: "1px dashed rgba(255,255,255,0.2)",
-                    borderRadius: 14, color: "rgba(255,255,255,0.6)",
-                    cursor: "pointer", fontSize: 14, fontWeight: 600,
-                  }}>+ Nieuw account aanmaken</button>
-                ) : (
-                  <p style={{ textAlign: "center", color: "rgba(255,255,255,0.3)", fontSize: 13 }}>Maximum van {MAX_USERS} gebruikers bereikt</p>
-                )}
-              </>
+                <button onClick={() => { setColor(beschikbaar[0] || USER_COLORS[0]); setMode("nieuw"); }} style={{ width: "100%", padding: "14px", background: "rgba(255,255,255,0.06)", border: "1px dashed rgba(255,255,255,0.2)", borderRadius: 14, color: "rgba(255,255,255,0.6)", cursor: "pointer", fontSize: 14, fontWeight: 600 }}>+ Nieuw account aanmaken</button>
+              </div>
             )}
           </div>
         )}
-
         {mode === "nieuw" && (
           <div className="slide-in">
             <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 16 }}>Nieuw account</p>
-
-            <input
-              placeholder="Jouw naam..."
-              value={username}
-              onChange={e => { setUsername(e.target.value); setError(""); }}
-              onKeyDown={e => e.key === "Enter" && registreer()}
-              autoFocus
-              style={{
-                width: "100%", background: "rgba(255,255,255,0.07)",
-                border: "1px solid rgba(255,255,255,0.15)", borderRadius: 12,
-                padding: "14px 16px", color: "#fff", fontSize: 16,
-                marginBottom: 20, outline: "none",
-              }}
-            />
-
+            <input placeholder="Jouw naam..." value={username} onChange={e => { setUsername(e.target.value); setError(""); }} onKeyDown={e => e.key === "Enter" && registreer()} autoFocus style={{ width: "100%", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 12, padding: "14px 16px", color: "#fff", fontSize: 16, marginBottom: 20, outline: "none" }} />
             <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>Kies jouw kleur</p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 24 }}>
-              {USER_COLORS.map(c => {
-                const bezet = takenKleur.includes(c);
-                return (
-                  <div key={c} onClick={() => !bezet && setColor(c)} className={`color-swatch ${color === c ? 'selected' : ''}`}
-                    style={{ background: c, opacity: bezet ? 0.25 : 1, cursor: bezet ? "not-allowed" : "pointer", position: "relative" }}
-                    title={bezet ? "Al in gebruik" : ""}>
-                    {bezet && <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>✕</span>}
-                  </div>
-                );
-              })}
+              {USER_COLORS.map(c => { const bezet = takenKleur.includes(c); return <div key={c} onClick={() => !bezet && setColor(c)} className={`color-swatch${color === c ? " selected" : ""}`} style={{ background: c, opacity: bezet ? 0.25 : 1, cursor: bezet ? "not-allowed" : "pointer", position: "relative" }}>{bezet && <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>✕</span>}</div>; })}
             </div>
-
             {error && <p style={{ color: "#FF6B6B", fontSize: 13, marginBottom: 12, fontWeight: 600 }}>⚠️ {error}</p>}
-
-            <button onClick={registreer} disabled={loading} style={{
-              width: "100%", padding: "15px",
-              background: loading ? "rgba(255,255,255,0.1)" : `linear-gradient(135deg, ${color}, ${color}bb)`,
-              color: "#fff", border: "none", borderRadius: 12,
-              fontSize: 16, fontWeight: 800, cursor: loading ? "not-allowed" : "pointer", marginBottom: 12,
-            }}>{loading ? "Aanmaken..." : "Account aanmaken →"}</button>
-
-            {users.length > 0 && (
-              <button onClick={() => setMode("kies")} style={{
-                width: "100%", padding: "12px", background: "transparent",
-                border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 14,
-              }}>← Terug</button>
-            )}
+            <button onClick={registreer} disabled={loading} style={{ width: "100%", padding: "15px", background: loading ? "rgba(255,255,255,0.1)" : `linear-gradient(135deg,${color},${color}bb)`, color: "#fff", border: "none", borderRadius: 12, fontSize: 16, fontWeight: 800, cursor: loading ? "not-allowed" : "pointer", marginBottom: 12 }}>{loading ? "Aanmaken..." : "Account aanmaken →"}</button>
+            {users.length > 0 && <button onClick={() => setMode("kies")} style={{ width: "100%", padding: "12px", background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 14 }}>← Terug</button>}
           </div>
         )}
       </div>
@@ -341,648 +165,651 @@ function LoginScreen({ onLogin }) {
   );
 }
 
-// ─── TaskCard ─────────────────────────────────────────────────────────────────
-function TaskCard({ task, onToggle, onDelete, onEdit, showDay, categories, allUsers }) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
+// TEAMS SCHERM
+function TeamsScreen({ currentUser, onClose }) {
+  const [teams, setTeams] = useState([]);
+  const [allMembers, setAllMembers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [mode, setMode] = useState("overview");
+  const [newTeamName, setNewTeamName] = useState("");
+  const [newTeamColor, setNewTeamColor] = useState(TEAM_COLORS[0]);
+  const [zoekTerm, setZoekTerm] = useState("");
+  const [zoekRes, setZoekRes] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [selTeam, setSelTeam] = useState(null);
 
-  // Bepaal welke gebruikers bij deze taak horen
-  const taskUsers = task.userIds === null
-    ? [{ id: null, color: "#888", username: "Iedereen" }]
-    : task.userIds.map(id => allUsers.find(u => u.id == id)).filter(Boolean);
+  useEffect(() => { laadAlles(); }, []);
+  async function laadAlles() {
+    setLoading(true);
+    const [r1,r2,r3] = await Promise.all([supabase.from("teams").select("*").order("name"), supabase.from("team_members").select("*"), supabase.from("users").select("*")]);
+    setTeams(r1.data||[]); setAllMembers(r2.data||[]); setAllUsers(r3.data||[]);
+    setLoading(false);
+  }
+  async function maakTeamAan() {
+    if (!newTeamName.trim()) return setError("Vul een teamnaam in");
+    setSaving(true); setError("");
+    const { data: b } = await supabase.from("teams").select("id").eq("name", newTeamName.trim()).single();
+    if (b) { setSaving(false); return setError("Naam al in gebruik"); }
+    const { data, error } = await supabase.from("teams").insert([{ name: newTeamName.trim(), color: newTeamColor, created_by: currentUser.id }]).select().single();
+    if (error) { setSaving(false); return setError("Aanmaken mislukt"); }
+    await supabase.from("team_members").insert([{ team_id: data.id, user_id: currentUser.id, role: "admin", status: "approved" }]);
+    setNewTeamName(""); setSaving(false); setMode("overview"); laadAlles();
+  }
+  async function zoekTeams() {
+    if (!zoekTerm.trim()) return;
+    const { data } = await supabase.from("teams").select("*").ilike("name", `%${zoekTerm.trim()}%`);
+    setZoekRes(data||[]);
+  }
+  async function vraagToegang(teamId) {
+    setSaving(true);
+    const b = allMembers.find(m => m.team_id===teamId && m.user_id===currentUser.id);
+    if (!b) await supabase.from("team_members").insert([{ team_id: teamId, user_id: currentUser.id, role: "member", status: "pending" }]);
+    setSaving(false); laadAlles();
+  }
+  async function keurGoed(id) { await supabase.from("team_members").update({ status: "approved" }).eq("id", id); laadAlles(); }
+  async function weiger(id) { await supabase.from("team_members").delete().eq("id", id); laadAlles(); }
+  async function verlaat(teamId) { await supabase.from("team_members").delete().eq("team_id", teamId).eq("user_id", currentUser.id); laadAlles(); }
+  async function verwijderTeam(teamId) { await supabase.from("teams").delete().eq("id", teamId); setSelTeam(null); setMode("overview"); laadAlles(); }
 
-  // Gebruik kleur van eerste gebruiker voor de border
-  const primaryColor = taskUsers[0]?.color || "#888";
+  const myM = allMembers.filter(m => m.user_id === currentUser.id);
+  const myApproved = teams.filter(t => myM.some(m => m.team_id===t.id && m.status==="approved"));
+  const myPending = teams.filter(t => myM.some(m => m.team_id===t.id && m.status==="pending"));
+  const pendingForMe = allMembers.filter(m => m.status==="pending" && myM.some(mm => mm.team_id===m.team_id && mm.role==="admin"));
+  const userById = id => allUsers.find(u => u.id===id);
+  const teamById = id => teams.find(t => t.id===id);
+  const membersOf = tid => allMembers.filter(m => m.team_id===tid);
 
-  const c = categories.find(c => c.id === task.category) || { icon: "🏷️", label: task.category };
-  const weekDates = getWeekDates();
+  const modalStyle = { background: "linear-gradient(180deg,#1e1e3f,#16163a)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "24px 24px 0 0", padding: "28px 24px 48px", width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto", fontFamily: "'DM Sans',sans-serif" };
+
   return (
-    <div className="task-card" style={{
-      background: `linear-gradient(135deg, ${primaryColor}11, ${primaryColor}06)`,
-      border: confirmDelete ? "1px solid rgba(255,80,80,0.4)" : `1px solid ${primaryColor}33`,
-      borderLeft: `4px solid ${confirmDelete ? "#FF6B6B" : primaryColor}`,
-      borderRadius: 14, padding: "14px 16px",
-      display: "flex", alignItems: "center", gap: 12, opacity: task.done ? 0.55 : 1,
-      transition: "border 0.2s",
-    }}>
-      <button onClick={() => onToggle(task.id, task.done)} style={{
-        width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
-        background: task.done ? primaryColor : "transparent",
-        border: `2px solid ${primaryColor}`, cursor: "pointer",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 14, color: "#fff", transition: "all 0.2s",
-      }}>{task.done ? "✓" : ""}</button>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 14, color: "#f0f0f0", textDecoration: task.done ? "line-through" : "none" }}>
-          {c.icon} {task.title}
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 600, backdropFilter: "blur(4px)" }}>
+      <div className="slide-in" onClick={e => e.stopPropagation()} style={modalStyle}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <h3 style={{ fontSize: 20, fontWeight: 900, color: "#f0f0f0", fontFamily: "'Space Mono',monospace" }}>
+            {mode==="overview"?"👥 Teams":mode==="nieuw"?"✨ Nieuw team":mode==="zoek"?"🔍 Team zoeken":"⚙️ Team beheren"}
+          </h3>
+          {mode!=="overview"
+            ? <button onClick={() => { setMode("overview"); setError(""); setZoekTerm(""); setZoekRes([]); }} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 8, padding: "6px 12px", color: "#fff", cursor: "pointer", fontSize: 13 }}>← Terug</button>
+            : <button onClick={onClose} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 8, padding: "6px 12px", color: "#fff", cursor: "pointer", fontSize: 13 }}>✕ Sluiten</button>
+          }
         </div>
+        {loading && <div style={{ display: "flex", justifyContent: "center", padding: 40 }}><div className="spinner" /></div>}
+
+        {!loading && mode==="overview" && (
+          <div>
+            {pendingForMe.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, opacity: 0.5, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>🔔 Toegangsverzoeken ({pendingForMe.length})</p>
+                {pendingForMe.map(m => {
+                  const u = userById(m.user_id); const t = teamById(m.team_id);
+                  return (
+                    <div key={m.id} style={{ background: "rgba(255,211,61,0.08)", border: "1px solid rgba(255,211,61,0.2)", borderRadius: 12, padding: "12px 16px", marginBottom: 8, display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 14 }}>{u?.username||"?"}</div><div style={{ fontSize: 12, opacity: 0.5 }}>wil lid worden van {t?.name||"?"}</div></div>
+                      <button onClick={() => keurGoed(m.id)} style={{ background: "rgba(78,205,196,0.2)", border: "1px solid rgba(78,205,196,0.4)", borderRadius: 8, padding: "5px 10px", color: "#4ECDC4", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✓</button>
+                      <button onClick={() => weiger(m.id)} style={{ background: "rgba(255,80,80,0.15)", border: "1px solid rgba(255,80,80,0.3)", borderRadius: 8, padding: "5px 10px", color: "#FF6B6B", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✕</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {myApproved.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, opacity: 0.5, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>Mijn teams</p>
+                {myApproved.map(team => {
+                  const tc = team.color||"#7c7cff";
+                  const members = membersOf(team.id).filter(m => m.status==="approved");
+                  const myRole = myM.find(m => m.team_id===team.id);
+                  return (
+                    <div key={team.id} style={{ background: tc+"11", border: `1px solid ${tc}33`, borderLeft: `4px solid ${tc}`, borderRadius: 12, padding: "14px 16px", marginBottom: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 15 }}>{team.name}</div>
+                          <div style={{ fontSize: 12, opacity: 0.5, marginTop: 3 }}>{members.length} {members.length===1?"lid":"leden"} · {myRole?.role==="admin"?"👑 Beheerder":"Lid"}</div>
+                        </div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {myRole?.role==="admin" && <button onClick={() => { setSelTeam(team); setMode("beheer"); }} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 8, padding: "6px 10px", color: "#fff", cursor: "pointer", fontSize: 12 }}>⚙️</button>}
+                          <button onClick={() => verlaat(team.id)} style={{ background: "rgba(255,80,80,0.12)", border: "none", borderRadius: 8, padding: "6px 10px", color: "#FF6B6B", cursor: "pointer", fontSize: 12 }}>Verlaten</button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {myPending.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, opacity: 0.5, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>Wacht op goedkeuring</p>
+                {myPending.map(team => {
+                  const myMem = allMembers.find(m => m.team_id===team.id && m.user_id===currentUser.id);
+                  return (<div key={team.id} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "12px 16px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 14, opacity: 0.7 }}>⏳ {team.name}</span>
+                    <button onClick={() => myMem && weiger(myMem.id)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 12 }}>Annuleer</button>
+                  </div>);
+                })}
+              </div>
+            )}
+            {myApproved.length===0 && myPending.length===0 && <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 14, textAlign: "center", padding: "20px 0" }}>Je bent nog geen lid van een team</p>}
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button onClick={() => setMode("nieuw")} style={{ flex: 1, padding: "13px", background: "linear-gradient(135deg,#7c7cff,#5555cc)", color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>+ Nieuw team</button>
+              <button onClick={() => setMode("zoek")} style={{ flex: 1, padding: "13px", background: "rgba(255,255,255,0.08)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>🔍 Team zoeken</button>
+            </div>
+          </div>
+        )}
+
+        {!loading && mode==="nieuw" && (
+          <div>
+            <input placeholder="Teamnaam..." value={newTeamName} onChange={e => { setNewTeamName(e.target.value); setError(""); }} onKeyDown={e => e.key==="Enter" && maakTeamAan()} autoFocus style={{ width: "100%", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 12, padding: "14px 16px", color: "#fff", fontSize: 16, marginBottom: 20, outline: "none" }} />
+            <p style={{ fontSize: 11, fontWeight: 700, opacity: 0.5, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>Teamkleur</p>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
+              {TEAM_COLORS.map(c => <div key={c} onClick={() => setNewTeamColor(c)} style={{ width: 32, height: 32, borderRadius: 8, background: c, cursor: "pointer", border: newTeamColor===c ? "3px solid #fff" : "3px solid transparent", transition: "all 0.15s" }} />)}
+            </div>
+            {error && <p style={{ color: "#FF6B6B", fontSize: 13, marginBottom: 12, fontWeight: 600 }}>⚠️ {error}</p>}
+            <button onClick={maakTeamAan} disabled={saving} style={{ width: "100%", padding: "15px", background: saving ? "rgba(255,255,255,0.1)" : `linear-gradient(135deg,${newTeamColor},${newTeamColor}99)`, color: "#fff", border: "none", borderRadius: 12, fontSize: 16, fontWeight: 800, cursor: saving ? "not-allowed" : "pointer" }}>{saving ? "Aanmaken..." : "Team aanmaken →"}</button>
+          </div>
+        )}
+
+        {!loading && mode==="zoek" && (
+          <div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <input placeholder="Zoek op teamnaam..." value={zoekTerm} onChange={e => setZoekTerm(e.target.value)} onKeyDown={e => e.key==="Enter" && zoekTeams()} style={{ flex: 1, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 12, padding: "12px 16px", color: "#fff", fontSize: 15, outline: "none" }} />
+              <button onClick={zoekTeams} style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 12, padding: "12px 16px", color: "#fff", cursor: "pointer", fontWeight: 700 }}>Zoek</button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {zoekRes.map(team => {
+                const mem = allMembers.find(m => m.team_id===team.id && m.user_id===currentUser.id);
+                const tc = team.color||"#7c7cff";
+                const cnt = membersOf(team.id).filter(m => m.status==="approved").length;
+                return (
+                  <div key={team.id} style={{ background: tc+"11", border: `1px solid ${tc}33`, borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div><div style={{ fontWeight: 700, fontSize: 14 }}>{team.name}</div><div style={{ fontSize: 12, opacity: 0.5 }}>{cnt} {cnt===1?"lid":"leden"}</div></div>
+                    {!mem && <button onClick={() => vraagToegang(team.id)} disabled={saving} style={{ background: "rgba(124,124,255,0.2)", border: "1px solid rgba(124,124,255,0.4)", borderRadius: 8, padding: "7px 14px", color: "#7c7cff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>Toegang vragen</button>}
+                    {mem?.status==="pending" && <span style={{ fontSize: 12, color: "#FFD93D" }}>⏳ Wacht op goedkeuring</span>}
+                    {mem?.status==="approved" && <span style={{ fontSize: 12, color: "#4ECDC4" }}>✓ Lid</span>}
+                  </div>
+                );
+              })}
+              {zoekRes.length===0 && zoekTerm && <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 14, textAlign: "center", padding: 20 }}>Geen teams gevonden</p>}
+            </div>
+          </div>
+        )}
+
+        {!loading && mode==="beheer" && selTeam && (
+          <div>
+            <div style={{ background: (selTeam.color||"#7c7cff")+"11", border: `1px solid ${selTeam.color||"#7c7cff"}33`, borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>{selTeam.name}</div>
+            </div>
+            <p style={{ fontSize: 11, fontWeight: 700, opacity: 0.5, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>Leden</p>
+            {membersOf(selTeam.id).map(m => {
+              const u = userById(m.user_id);
+              return (
+                <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "10px 14px", marginBottom: 6 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: u?.color||"#888", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, flexShrink: 0 }}>{u?.username?.[0]?.toUpperCase()||"?"}</div>
+                  <div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: 14 }}>{u?.username||"?"}</div><div style={{ fontSize: 11, opacity: 0.5 }}>{m.role==="admin"?"👑 Beheerder":"Lid"} · {m.status==="pending"?"⏳ Wacht":"✓ Actief"}</div></div>
+                  {m.status==="pending" && (<><button onClick={() => keurGoed(m.id)} style={{ background: "rgba(78,205,196,0.2)", border: "none", borderRadius: 8, padding: "5px 10px", color: "#4ECDC4", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✓</button><button onClick={() => weiger(m.id)} style={{ background: "rgba(255,80,80,0.15)", border: "none", borderRadius: 8, padding: "5px 10px", color: "#FF6B6B", cursor: "pointer", fontSize: 12 }}>✕</button></>)}
+                  {m.status==="approved" && m.user_id!==currentUser.id && <button onClick={() => weiger(m.id)} style={{ background: "rgba(255,80,80,0.12)", border: "none", borderRadius: 8, padding: "5px 10px", color: "#FF6B6B", cursor: "pointer", fontSize: 12 }}>Verwijder</button>}
+                </div>
+              );
+            })}
+            <button onClick={() => verwijderTeam(selTeam.id)} style={{ width: "100%", marginTop: 20, padding: "12px", background: "rgba(255,80,80,0.12)", border: "1px solid rgba(255,80,80,0.25)", borderRadius: 12, color: "#FF6B6B", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Team verwijderen</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// TASKCARD
+function TaskCard({ task, onToggle, onDelete, onEdit, showDay, categories, allUsers, allTeams }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const taskUsers = task.userIds === null ? [{ id: null, color: "#888", username: "Iedereen" }] : (task.userIds||[]).map(id => allUsers.find(u => u.id==id)).filter(Boolean);
+  const taskTeams = (task.teamIds||[]).map(id => allTeams.find(t => t.id==id)).filter(Boolean);
+  const pc = (taskUsers[0]?.color !== "#888" ? taskUsers[0]?.color : null) || taskTeams[0]?.color || "#888";
+  const cat = categories.find(c => c.id===task.category) || { icon: "🏷️" };
+  const wd = getWeekDates(0);
+  return (
+    <div className="task-card" style={{ background: `linear-gradient(135deg,${pc}11,${pc}06)`, border: confirmDelete ? "1px solid rgba(255,80,80,0.4)" : `1px solid ${pc}33`, borderLeft: `4px solid ${confirmDelete?"#FF6B6B":pc}`, borderRadius: 14, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, opacity: task.done ? 0.55 : 1 }}>
+      <button onClick={() => onToggle(task.id, task.done)} style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, background: task.done ? pc : "transparent", border: `2px solid ${pc}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "#fff" }}>{task.done ? "✓" : ""}</button>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: "#f0f0f0", textDecoration: task.done ? "line-through" : "none" }}>{cat.icon} {task.title}</div>
         {confirmDelete ? (
           <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-            <button onClick={() => onDelete(task.id)} style={{
-              background: "rgba(255,80,80,0.25)", border: "1px solid rgba(255,80,80,0.4)",
-              borderRadius: 8, padding: "4px 12px", color: "#FF6B6B",
-              fontSize: 12, fontWeight: 700, cursor: "pointer",
-            }}>Ja, verwijder</button>
-            <button onClick={() => setConfirmDelete(false)} style={{
-              background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 8, padding: "4px 12px", color: "rgba(255,255,255,0.5)",
-              fontSize: 12, fontWeight: 700, cursor: "pointer",
-            }}>Annuleer</button>
+            <button onClick={() => onDelete(task.id)} style={{ background: "rgba(255,80,80,0.25)", border: "1px solid rgba(255,80,80,0.4)", borderRadius: 8, padding: "4px 12px", color: "#FF6B6B", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Ja, verwijder</button>
+            <button onClick={() => setConfirmDelete(false)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "4px 12px", color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Annuleer</button>
           </div>
         ) : (
-          <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap", alignItems: "center" }}>
-            {/* Gebruikersbadges */}
-            {taskUsers.map(u => (
-              <span key={u.id ?? "all"} style={{ fontSize: 11, background: u.color + "22", color: u.color, borderRadius: 6, padding: "2px 8px", fontWeight: 700 }}>
-                {u.username[0]?.toUpperCase()} {u.username}
-              </span>
-            ))}
-            {showDay && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", padding: "2px 0" }}>{DAYS[task.dayIndex]} {formatDate(weekDates[task.dayIndex])}</span>}
-            {task.deadline && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", padding: "2px 0" }}>{task.deadline === "hele_dag" ? "🌅 Hele dag" : `🕐 ${task.deadline}`}</span>}
+          <div style={{ display: "flex", gap: 5, marginTop: 4, flexWrap: "wrap", alignItems: "center" }}>
+            {taskUsers.map(u => <span key={u.id???"all"} style={{ fontSize: 11, background: u.color+"22", color: u.color, borderRadius: 6, padding: "2px 7px", fontWeight: 700 }}>{u.username[0]?.toUpperCase()} {u.username}</span>)}
+            {taskTeams.map(t => { const tc=t.color||"#7c7cff"; return <span key={t.id} style={{ fontSize: 11, background: tc+"22", color: tc, borderRadius: 6, padding: "2px 7px", fontWeight: 700 }}>👥 {t.name}</span>; })}
+            {showDay && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{DAYS[task.dayIndex]} {formatDate(wd[task.dayIndex])}</span>}
+            {task.deadline && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{task.deadline==="hele_dag" ? "🌅 Hele dag" : `🕐 ${task.deadline}`}</span>}
           </div>
         )}
       </div>
       {!confirmDelete && (
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-          <button onClick={() => onEdit(task)} style={{
-            background: "rgba(255,255,255,0.05)", border: "none", borderRadius: 8,
-            padding: "6px 8px", cursor: "pointer", color: "rgba(255,255,255,0.3)", fontSize: 13,
-          }}>✏️</button>
-          <button onClick={() => setConfirmDelete(true)} style={{
-            background: "rgba(255,255,255,0.05)", border: "none", borderRadius: 8,
-            padding: "6px 8px", cursor: "pointer", color: "rgba(255,255,255,0.3)", fontSize: 14,
-          }}>✕</button>
+          <button onClick={() => onEdit(task)} style={{ background: "rgba(255,255,255,0.05)", border: "none", borderRadius: 8, padding: "6px 8px", cursor: "pointer", color: "rgba(255,255,255,0.3)", fontSize: 13 }}>✏️</button>
+          <button onClick={() => setConfirmDelete(true)} style={{ background: "rgba(255,255,255,0.05)", border: "none", borderRadius: 8, padding: "6px 8px", cursor: "pointer", color: "rgba(255,255,255,0.3)", fontSize: 14 }}>✕</button>
         </div>
       )}
     </div>
   );
 }
 
-// ─── Hoofd App ────────────────────────────────────────────────────────────────
+// MAIN APP
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [allUsers, setAllUsers] = useState([]);
+  const [allTeams, setAllTeams] = useState([]);
+  const [myTeamIds, setMyTeamIds] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [appError, setAppError] = useState(null);
   const [view, setView] = useState("week");
-  const [selectedDay, setSelectedDay] = useState(() => { const d = new Date().getDay(); return d === 0 ? 6 : d - 1; });
+  const [selectedDay, setSelectedDay] = useState(() => { const d = new Date().getDay(); return d===0?6:d-1; });
   const [showModal, setShowModal] = useState(false);
+  const [showTeamsScreen, setShowTeamsScreen] = useState(false);
   const [notification, setNotification] = useState(null);
   const [filterUser, setFilterUser] = useState("all");
-  const [filterDone, setFilterDone] = useState("all"); // all | done | open
+  const [filterTeam, setFilterTeam] = useState("all");
+  const [filterDone, setFilterDone] = useState("all");
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [categories, setCategories] = useState(() => {
-    try { const s = localStorage.getItem("woonplanner_categories"); return s ? JSON.parse(s) : DEFAULT_CATEGORIES; }
-    catch { return DEFAULT_CATEGORIES; }
-  });
+  const [categories, setCategories] = useState(() => { try { const s = localStorage.getItem("woonplanner_categories"); return s ? JSON.parse(s) : DEFAULT_CATEGORIES; } catch(e) { return DEFAULT_CATEGORIES; } });
   const [showLabelManager, setShowLabelManager] = useState(false);
   const [newLabel, setNewLabel] = useState({ label: "", icon: "🏷️" });
-  const [editingTask, setEditingTask] = useState(null); // null = nieuw, task object = bewerken
-  const [form, setForm] = useState({ title: "", userIds: [], category: DEFAULT_CATEGORIES[0].id, dayIndex: 0, deadline: "hele_dag" });
+  const [editingTask, setEditingTask] = useState(null);
+  const [form, setForm] = useState({ title: "", userIds: [], teamIds: [], category: DEFAULT_CATEGORIES[0].id, dayIndex: 0, deadline: "hele_dag" });
   const [weekOffset, setWeekOffset] = useState(0);
   const [holidays, setHolidays] = useState({});
 
   const weekDates = getWeekDates(weekOffset);
-  const todayIndex = weekOffset === 0 ? (() => { const d = new Date().getDay(); return d === 0 ? 6 : d - 1; })() : -1;
+  const todayIndex = weekOffset===0 ? (() => { const d=new Date().getDay(); return d===0?6:d-1; })() : -1;
+  const currentMonday = weekDates[0].toISOString().split("T")[0];
 
-  // Herstel sessie bij laden
   useEffect(() => {
-    async function herstelSessie() {
-      const savedId = localStorage.getItem("woonplanner_user_id");
-      if (savedId) {
-        const { data } = await supabase.from('users').select('*').eq('id', parseInt(savedId)).single();
-        if (data) setCurrentUser(data);
-      }
+    async function herstel() {
+      const sid = localStorage.getItem("woonplanner_user_id");
+      if (sid) { const { data } = await supabase.from("users").select("*").eq("id", parseInt(sid)).single(); if (data) setCurrentUser(data); }
       setLoading(false);
     }
-    herstelSessie();
+    herstel();
   }, []);
 
-  // Laad alle gebruikers
-  const loadUsers = useCallback(async () => {
-    const { data } = await supabase.from('users').select('*').order('created_at');
-    setAllUsers(data || []);
-  }, []);
-
-  // Laad taken
-  const loadTasks = useCallback(async () => {
+  const loadAll = useCallback(async () => {
+    if (!currentUser) return;
     try {
-      const { data, error } = await supabase.from('tasks').select('*').order('created_at', { ascending: true });
-      if (error) throw error;
-      setTasks(data.map(normalizeTask));
-    } catch (e) {
-      setError('Database verbinding mislukt: ' + e.message);
-    }
-  }, []);
+      const [r1,r2,r3,r4,r5] = await Promise.all([
+        supabase.from("users").select("*").order("created_at"),
+        supabase.from("teams").select("*").order("name"),
+        supabase.from("team_members").select("*").eq("user_id", currentUser.id).eq("status", "approved"),
+        supabase.from("tasks").select("*").order("created_at", { ascending: true }),
+        supabase.from("task_teams").select("*"),
+      ]);
+      setAllUsers(r1.data||[]);
+      setAllTeams(r2.data||[]);
+      const myIds = (r3.data||[]).map(m => m.team_id);
+      setMyTeamIds(myIds);
+      const map = {};
+      (r5.data||[]).forEach(tt => { if (!map[tt.task_id]) map[tt.task_id]=[]; map[tt.task_id].push(tt.team_id); });
+      const visible = (r4.data||[]).filter(t => {
+        const tTeams = map[t.id]||[];
+        if (tTeams.length > 0) return tTeams.some(tid => myIds.includes(tid));
+        return true;
+      });
+      setTasks(visible.map(t => normalizeTask(t, map[t.id]||[])));
+      setAppError(null);
+    } catch(e) { setAppError("Verbinding mislukt"); }
+  }, [currentUser]);
 
-  useEffect(() => {
-    if (currentUser) { loadTasks(); loadUsers(); }
-  }, [currentUser, loadTasks, loadUsers]);
-
+  useEffect(() => { loadAll(); }, [loadAll]);
   useEffect(() => {
     if (!currentUser) return;
-    const interval = setInterval(loadTasks, 30000);
-    return () => clearInterval(interval);
-  }, [currentUser, loadTasks]);
+    const iv = setInterval(loadAll, 30000);
+    return () => clearInterval(iv);
+  }, [currentUser, loadAll]);
+
+  useEffect(() => { try { localStorage.setItem("woonplanner_categories", JSON.stringify(categories)); } catch(e) {} }, [categories]);
 
   useEffect(() => {
-    try { localStorage.setItem("woonplanner_categories", JSON.stringify(categories)); } catch {}
-  }, [categories]);
-
-  // ─── Feestdagen laden via Nager.Date API ────────────────────────────────────
-  useEffect(() => {
-    async function laadFeestdagen() {
-      const jaren = [...new Set([new Date().getFullYear(), new Date().getFullYear() + 1])];
-      const resultaten = {};
-      for (const jaar of jaren) {
+    async function laadHolidays() {
+      const jaar = new Date().getFullYear();
+      const res = {};
+      for (const j of [jaar, jaar+1]) {
         try {
-          const cached = localStorage.getItem(`holidays_NL_${jaar}`);
-          if (cached) {
-            Object.assign(resultaten, JSON.parse(cached));
-          } else {
-            const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${jaar}/NL`);
-            const data = await res.json();
-            const jaarData = {};
-            data.forEach(h => { jaarData[h.date] = h.localName; });
-            localStorage.setItem(`holidays_NL_${jaar}`, JSON.stringify(jaarData));
-            Object.assign(resultaten, jaarData);
+          const cached = localStorage.getItem(`holidays_NL_${j}`);
+          if (cached) Object.assign(res, JSON.parse(cached));
+          else {
+            const r = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${j}/NL`);
+            const data = await r.json();
+            const jd = {};
+            data.forEach(h => { jd[h.date] = h.localName; });
+            localStorage.setItem(`holidays_NL_${j}`, JSON.stringify(jd));
+            Object.assign(res, jd);
           }
-        } catch {}
+        } catch(e) {}
       }
-      setHolidays(resultaten);
+      setHolidays(res);
     }
-    laadFeestdagen();
+    laadHolidays();
   }, []);
 
-  function handleLogin(user) { setCurrentUser(user); }
+  function holidayFor(date) { return holidays[date.toISOString().split("T")[0]] || null; }
 
-  function uitloggen() {
-    localStorage.removeItem("woonplanner_user_id");
-    setCurrentUser(null);
-    setTasks([]);
-  }
+  async function refresh() { setRefreshing(true); await loadAll(); setTimeout(() => setRefreshing(false), 500); }
 
-  // Maandag van de zichtbare week als ISO string (voor filteren)
-  const currentMonday = weekDates[0].toISOString().split('T')[0];
+  const myApprovedTeams = allTeams.filter(t => myTeamIds.includes(t.id));
 
-  const filtered = tasks.filter(t => {
-    const matchUser = filterUser === "all" || t.userIds === null || t.userIds?.includes(parseInt(filterUser));
+  const filtered = useMemo(() => tasks.filter(t => {
     const matchWeek = t.weekMonday === currentMonday;
-    const matchDone = filterDone === "all" || (filterDone === "done" && t.done) || (filterDone === "open" && !t.done);
-    return matchUser && matchWeek && matchDone;
-  });
-
-  async function refresh() {
-    setRefreshing(true);
-    await loadTasks();
-    await loadUsers();
-    setTimeout(() => setRefreshing(false), 500);
-  }
-
-  async function toggleDone(id, currentDone) {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !currentDone } : t));
-    try {
-      const { error } = await supabase.from('tasks').update({ done: !currentDone }).eq('id', id);
-      if (error) throw error;
-      if (!currentDone) showNotif("✅ Afgevinkt!", "");
-    } catch {
-      setTasks(prev => prev.map(t => t.id === id ? { ...t, done: currentDone } : t));
-      showNotif("❌ Mislukt", "Probeer het opnieuw");
-    }
-  }
+    const matchDone = filterDone==="all" || (filterDone==="done" && t.done) || (filterDone==="open" && !t.done);
+    const matchUser = filterUser==="all" || t.userIds===null || (t.userIds||[]).includes(parseInt(filterUser));
+    const matchTeam = filterTeam==="all" ? true : (t.teamIds||[]).includes(parseInt(filterTeam));
+    return matchWeek && matchDone && matchUser && matchTeam;
+  }), [tasks, currentMonday, filterDone, filterUser, filterTeam]);
 
   async function saveTask() {
     if (!form.title.trim()) return;
     setSaving(true);
-    // null = iedereen, anders komma-gescheiden string van ids
-    const user_id = form.userIds.length === 0 ? null : form.userIds.join(',');
+    const user_id = form.userIds.length===0 ? null : form.userIds.join(",");
     try {
       if (editingTask) {
-        const { error } = await supabase.from('tasks').update({
-          title: form.title, user_id,
-          category: form.category, day_index: form.dayIndex,
-          deadline: form.deadline || '',
-        }).eq('id', editingTask.id);
+        const { error } = await supabase.from("tasks").update({ title: form.title, user_id, category: form.category, day_index: form.dayIndex, deadline: form.deadline||"" }).eq("id", editingTask.id);
         if (error) throw error;
-        const userIds = user_id ? user_id.split(',').map(Number) : null;
-        setTasks(prev => prev.map(t => t.id === editingTask.id
-          ? { ...t, title: form.title, userIds, category: form.category, dayIndex: form.dayIndex, deadline: form.deadline }
-          : t));
+        await supabase.from("task_teams").delete().eq("task_id", editingTask.id);
+        if (form.teamIds.length > 0) await supabase.from("task_teams").insert(form.teamIds.map(tid => ({ task_id: editingTask.id, team_id: tid })));
         showNotif("✏️ Bijgewerkt!", form.title);
       } else {
-        const { data, error } = await supabase.from('tasks').insert([{
-          title: form.title, user_id,
-          category: form.category, day_index: form.dayIndex,
-          done: false, deadline: form.deadline || '',
-          week_monday: currentMonday,
-        }]).select().single();
+        const { data, error } = await supabase.from("tasks").insert([{ title: form.title, user_id, category: form.category, day_index: form.dayIndex, done: false, deadline: form.deadline||"", week_monday: currentMonday }]).select().single();
         if (error) throw error;
-        setTasks(prev => [...prev, normalizeTask(data)]);
+        if (form.teamIds.length > 0) await supabase.from("task_teams").insert(form.teamIds.map(tid => ({ task_id: data.id, team_id: tid })));
         showNotif("🎉 Toegevoegd!", form.title);
       }
-      setShowModal(false);
-      setEditingTask(null);
-      setForm(f => ({ ...f, title: "", userIds: [], dayIndex: selectedDay, deadline: "hele_dag" }));
-    } catch { showNotif("❌ Mislukt", "Kon taak niet opslaan"); }
+      setShowModal(false); setEditingTask(null);
+      setForm(f => ({ ...f, title: "", userIds: [], teamIds: [], dayIndex: selectedDay, deadline: "hele_dag" }));
+      await loadAll();
+    } catch(e) { showNotif("❌ Mislukt", "Kon taak niet opslaan"); }
     finally { setSaving(false); }
   }
 
-  async function deleteTask(id) {
-    setTasks(prev => prev.filter(t => t.id !== id));
+  async function toggleDone(id, cur) {
+    setTasks(prev => prev.map(t => t.id===id ? { ...t, done: !cur } : t));
     try {
-      const { error } = await supabase.from('tasks').delete().eq('id', id);
+      const { error } = await supabase.from("tasks").update({ done: !cur }).eq("id", id);
       if (error) throw error;
-    } catch { showNotif("❌ Mislukt", "Kon taak niet verwijderen"); loadTasks(); }
+      if (!cur) showNotif("✅ Afgevinkt!", "");
+    } catch(e) {
+      setTasks(prev => prev.map(t => t.id===id ? { ...t, done: cur } : t));
+      showNotif("❌ Mislukt", "");
+    }
   }
 
-  function openModal(dayIndex) {
-    setEditingTask(null);
-    setForm({ title: "", userIds: [], category: categories[0]?.id || "household", dayIndex, deadline: "hele_dag" });
-    setShowModal(true);
+  async function deleteTask(id) {
+    setTasks(prev => prev.filter(t => t.id!==id));
+    try {
+      await supabase.from("task_teams").delete().eq("task_id", id);
+      const { error } = await supabase.from("tasks").delete().eq("id", id);
+      if (error) throw error;
+    } catch(e) { showNotif("❌ Mislukt", ""); loadAll(); }
   }
 
-  function openEditModal(task) {
-    setEditingTask(task);
-    setForm({ title: task.title, userIds: task.userIds || [], category: task.category, dayIndex: task.dayIndex, deadline: task.deadline || "hele_dag" });
-    setShowModal(true);
-  }
-  function addLabel() {
-    if (!newLabel.label.trim()) return;
-    setCategories(prev => [...prev, { id: "custom_" + Date.now(), label: newLabel.label.trim(), icon: newLabel.icon }]);
-    setNewLabel({ label: "", icon: "🏷️" });
-  }
-  function deleteLabel(id) { setCategories(prev => prev.filter(c => c.id !== id)); }
-  function holidayForDate(date) {
-    const key = date.toISOString().split('T')[0];
-    return holidays[key] || null;
-  }
-
+  function openModal(dayIndex) { setEditingTask(null); setForm({ title: "", userIds: [], teamIds: [], category: categories[0]?.id||"household", dayIndex, deadline: "hele_dag" }); setShowModal(true); }
+  function openEditModal(task) { setEditingTask(task); setForm({ title: task.title, userIds: task.userIds||[], teamIds: task.teamIds||[], category: task.category, dayIndex: task.dayIndex, deadline: task.deadline||"hele_dag" }); setShowModal(true); }
+  function addLabel() { if (!newLabel.label.trim()) return; setCategories(prev => [...prev, { id: "custom_"+Date.now(), label: newLabel.label.trim(), icon: newLabel.icon }]); setNewLabel({ label: "", icon: "🏷️" }); }
+  function deleteLabel(id) { setCategories(prev => prev.filter(c => c.id!==id)); }
   function showNotif(title, body) { setNotification({ title, body }); setTimeout(() => setNotification(null), 3000); }
-  const tasksByDay = (i) => filtered.filter(t => t.dayIndex === i);
+  function tasksByDay(i) { return filtered.filter(t => t.dayIndex===i); }
 
-  // Loading
-  if (loading) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}>
-      <div className="spinner" />
-    </div>
-  );
-
-  // Niet ingelogd
-  if (!currentUser) return <LoginScreen onLogin={handleLogin} />;
-
-  // Error
-  if (error) return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", gap: 16, padding: 32, textAlign: "center" }}>
-      <div style={{ fontSize: 48 }}>⚠️</div>
-      <p style={{ color: "#FF6B6B", fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 18 }}>Database niet bereikbaar</p>
-      <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 14 }}>{error}</p>
-      <button onClick={loadTasks} style={{ background: "#FF6B6B", color: "#fff", border: "none", borderRadius: 12, padding: "12px 24px", cursor: "pointer", fontWeight: 700 }}>Opnieuw proberen</button>
+  if (loading) return <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:"100vh" }}><div className="spinner" /></div>;
+  if (!currentUser) return <LoginScreen onLogin={u => setCurrentUser(u)} />;
+  if (appError) return (
+    <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",gap:16,padding:32,textAlign:"center" }}>
+      <div style={{ fontSize:48 }}>⚠️</div>
+      <p style={{ color:"#FF6B6B",fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:18 }}>Database niet bereikbaar</p>
+      <p style={{ color:"rgba(255,255,255,0.4)",fontSize:14 }}>{appError}</p>
+      <button onClick={loadAll} style={{ background:"#FF6B6B",color:"#fff",border:"none",borderRadius:12,padding:"12px 24px",cursor:"pointer",fontWeight:700 }}>Opnieuw</button>
     </div>
   );
 
   return (
-    <div style={{ minHeight: "100vh", fontFamily: "'DM Sans', 'Segoe UI', sans-serif", color: "#f0f0f0", paddingBottom: "calc(80px + env(safe-area-inset-bottom))" }}>
+    <div style={{ minHeight:"100vh",fontFamily:"'DM Sans',sans-serif",color:"#f0f0f0",paddingBottom:"calc(80px + env(safe-area-inset-bottom))" }}>
 
       {notification && (
-        <div className="notif" style={{
-          position: "fixed", top: "calc(20px + env(safe-area-inset-top))", right: 20, zIndex: 9999,
-          background: "linear-gradient(135deg, #2d2d5e, #3d3d7e)",
-          border: "1px solid rgba(255,255,255,0.15)", borderRadius: 16,
-          padding: "14px 20px", boxShadow: "0 20px 60px rgba(0,0,0,0.5)", maxWidth: 280,
-        }}>
-          <div style={{ fontWeight: 700, fontSize: 14 }}>{notification.title}</div>
-          {notification.body && <div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>{notification.body}</div>}
+        <div className="notif" style={{ position:"fixed",top:"calc(20px + env(safe-area-inset-top))",right:20,zIndex:9999,background:"linear-gradient(135deg,#2d2d5e,#3d3d7e)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:16,padding:"14px 20px",boxShadow:"0 20px 60px rgba(0,0,0,0.5)",maxWidth:280 }}>
+          <div style={{ fontWeight:700,fontSize:14 }}>{notification.title}</div>
+          {notification.body && <div style={{ fontSize:12,opacity:0.7,marginTop:2 }}>{notification.body}</div>}
         </div>
       )}
 
-      {/* Header */}
-      <div style={{ paddingTop: "calc(20px + env(safe-area-inset-top))", paddingBottom: 14, paddingLeft: 20, paddingRight: 20, background: "rgba(26,26,46,0.97)", borderBottom: "1px solid rgba(255,255,255,0.06)", backdropFilter: "blur(10px)", position: "sticky", top: 0, zIndex: 100 }}>
-        <div style={{ maxWidth: 900, margin: "0 auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
-            <div>
-              <h1 style={{ fontSize: 22, fontWeight: 900, letterSpacing: -1, fontFamily: "'Space Mono', monospace" }}>🏠 WoonPlanner</h1>
-            </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              {/* User filter knoppen */}
-              {[{ id: "all", username: "Iedereen", color: "#888" }, ...allUsers].map(u => (
-                <button key={u.id} onClick={() => setFilterUser(u.id)} style={{
-                  background: filterUser == u.id ? u.color : "rgba(255,255,255,0.06)",
-                  color: "#fff", border: "none", borderRadius: 20, padding: "5px 12px",
-                  fontSize: 12, fontWeight: 700, cursor: "pointer", opacity: filterUser == u.id ? 1 : 0.5,
-                  transition: "all 0.2s",
-                }}>{u.username}</button>
-              ))}
-              {/* Huidig ingelogde gebruiker + uitloggen */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 4, paddingLeft: 12, borderLeft: "1px solid rgba(255,255,255,0.1)" }}>
-                <div style={{ width: 28, height: 28, borderRadius: "50%", background: currentUser.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 900 }}>
-                  {currentUser.username[0].toUpperCase()}
-                </div>
-                <span style={{ fontSize: 13, fontWeight: 700, opacity: 0.8 }}>{currentUser.username}</span>
-                <button onClick={uitloggen} style={{ background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 8, padding: "4px 8px", color: "rgba(255,255,255,0.4)", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>Wissel</button>
-              </div>
+      {showTeamsScreen && <TeamsScreen currentUser={currentUser} onClose={() => { setShowTeamsScreen(false); loadAll(); }} />}
+
+      {/* HEADER */}
+      <div style={{ paddingTop:"calc(14px + env(safe-area-inset-top))",paddingBottom:10,paddingLeft:16,paddingRight:16,background:"rgba(26,26,46,0.97)",borderBottom:"1px solid rgba(255,255,255,0.06)",backdropFilter:"blur(10px)",position:"sticky",top:0,zIndex:100 }}>
+        <div style={{ maxWidth:900,margin:"0 auto" }}>
+
+          {/* Rij 1 */}
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap",gap:6 }}>
+            <h1 style={{ fontSize:19,fontWeight:900,letterSpacing:-1,fontFamily:"'Space Mono',monospace",flexShrink:0 }}>🏠 WoonPlanner</h1>
+            <div style={{ display:"flex",gap:5,alignItems:"center",flexWrap:"wrap" }}>
+              {[{ id:"all",username:"Allen",color:"#888" },...allUsers].map(u => {
+                const active = String(filterUser)===String(u.id);
+                return <button key={u.id} onClick={() => setFilterUser(String(u.id))} style={{ background:active?u.color:"rgba(255,255,255,0.06)",color:"#fff",border:"none",borderRadius:20,padding:"3px 9px",fontSize:11,fontWeight:700,cursor:"pointer",opacity:active?1:0.5 }}>{u.username}</button>;
+              })}
+              <div style={{ width:1,height:16,background:"rgba(255,255,255,0.1)",flexShrink:0 }} />
+              <div style={{ width:26,height:26,borderRadius:"50%",background:currentUser.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,flexShrink:0 }}>{currentUser.username[0].toUpperCase()}</div>
+              <span style={{ fontSize:12,fontWeight:700,opacity:0.8 }}>{currentUser.username}</span>
+              <button onClick={() => { localStorage.removeItem("woonplanner_user_id"); setCurrentUser(null); }} style={{ background:"rgba(255,255,255,0.06)",border:"none",borderRadius:8,padding:"3px 7px",color:"rgba(255,255,255,0.4)",fontSize:11,cursor:"pointer" }}>Wissel</button>
             </div>
           </div>
-          {/* View tabs */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ display: "flex", gap: 4, background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: 4 }}>
-              {[{ id: "week", label: "📅 Week" }, { id: "day", label: "🌤 Dag" }, { id: "tasks", label: "📋 Taken" }].map(v => (
-                <button key={v.id} onClick={() => setView(v.id)} style={{
-                  background: view === v.id ? "rgba(255,255,255,0.15)" : "transparent",
-                  color: view === v.id ? "#fff" : "rgba(255,255,255,0.5)",
-                  border: "none", borderRadius: 8, padding: "7px 16px",
-                  fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s",
-                }}>{v.label}</button>
+
+          {/* Rij 2: team filter */}
+          <div style={{ display:"flex",gap:5,marginBottom:8,overflowX:"auto",paddingBottom:2 }}>
+            <button onClick={() => setFilterTeam("all")} style={{ background:filterTeam==="all"?"rgba(255,255,255,0.14)":"rgba(255,255,255,0.04)",border:filterTeam==="all"?"1px solid rgba(255,255,255,0.22)":"1px solid transparent",borderRadius:20,padding:"3px 11px",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0 }}>Alle teams</button>
+            {myApprovedTeams.map(t => {
+              const tc = t.color||"#7c7cff";
+              const active = String(filterTeam)===String(t.id);
+              return <button key={t.id} onClick={() => setFilterTeam(String(t.id))} style={{ background:active?tc+"33":"rgba(255,255,255,0.04)",border:active?`1px solid ${tc}66`:"1px solid transparent",borderRadius:20,padding:"3px 11px",color:active?tc:"rgba(255,255,255,0.45)",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0 }}>👥 {t.name}</button>;
+            })}
+            <button onClick={() => setShowTeamsScreen(true)} style={{ background:"rgba(124,124,255,0.1)",border:"1px solid rgba(124,124,255,0.25)",borderRadius:20,padding:"3px 11px",color:"#7c7cff",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0 }}>+ Teams</button>
+          </div>
+
+          {/* Rij 3: views + weeknav */}
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap" }}>
+            <div style={{ display:"flex",gap:3,background:"rgba(255,255,255,0.05)",borderRadius:12,padding:3 }}>
+              {[{ id:"week",label:"📅 Week" },{ id:"day",label:"🌤 Dag" },{ id:"tasks",label:"📋 Taken" }].map(v => (
+                <button key={v.id} onClick={() => setView(v.id)} style={{ background:view===v.id?"rgba(255,255,255,0.15)":"transparent",color:view===v.id?"#fff":"rgba(255,255,255,0.5)",border:"none",borderRadius:8,padding:"5px 13px",fontSize:12,fontWeight:600,cursor:"pointer" }}>{v.label}</button>
               ))}
             </div>
-            {/* Week navigator */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button onClick={() => setWeekOffset(o => o - 1)} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 8, width: 28, height: 28, color: "#fff", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>‹</button>
-              <span style={{ fontSize: 12, fontWeight: 700, color: weekOffset === 0 ? "#4ECDC4" : "rgba(255,255,255,0.6)", whiteSpace: "nowrap" }}>
-                {weekOffset === 0 ? "Deze week" : weekOffset === 1 ? "Volgende week" : weekOffset === -1 ? "Vorige week" : `Week ${getWeekNumber(weekDates[0]).week}`}
-                {" "}<span style={{ opacity: 0.5, fontWeight: 400 }}>({formatDate(weekDates[0])} – {formatDate(weekDates[6])})</span>
+            <div style={{ display:"flex",alignItems:"center",gap:5 }}>
+              <button onClick={() => setWeekOffset(o => o-1)} style={{ background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,width:26,height:26,color:"#fff",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center" }}>‹</button>
+              <span style={{ fontSize:11,fontWeight:700,color:weekOffset===0?"#4ECDC4":"rgba(255,255,255,0.6)",whiteSpace:"nowrap" }}>
+                {weekOffset===0?"Deze week":weekOffset===1?"Volgende week":weekOffset===-1?"Vorige week":`Week ${getWeekNumber(weekDates[0])}`}
+                {" "}<span style={{ opacity:0.4,fontWeight:400 }}>({formatDate(weekDates[0])} – {formatDate(weekDates[6])})</span>
               </span>
-              <button onClick={() => setWeekOffset(o => o + 1)} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 8, width: 28, height: 28, color: "#fff", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>›</button>
-              {weekOffset !== 0 && (
-                <button onClick={() => setWeekOffset(0)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "3px 8px", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>Vandaag</button>
-              )}
-              <button onClick={refresh} title="Verversen" style={{
-                background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 8, width: 26, height: 26, cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13,
-                animation: refreshing ? "spin 0.5s linear" : "none",
-              }}>🔄</button>
-              <span style={{ fontSize: 11, color: "#4ECDC4" }}>● live</span>
+              <button onClick={() => setWeekOffset(o => o+1)} style={{ background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,width:26,height:26,color:"#fff",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center" }}>›</button>
+              {weekOffset!==0 && <button onClick={() => setWeekOffset(0)} style={{ background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,padding:"2px 7px",color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:11,fontWeight:700 }}>Nu</button>}
+              <button onClick={refresh} style={{ background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,width:24,height:24,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,animation:refreshing?"spin 0.5s linear":"none" }}>🔄</button>
+              <span style={{ fontSize:11,color:"#4ECDC4" }}>●</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Main content */}
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "20px 16px" }}>
+      {/* MAIN */}
+      <div style={{ maxWidth:900,margin:"0 auto",padding:"16px" }}>
 
         {/* WEEK VIEW */}
-        {view === "week" && (
+        {view==="week" && (
           <div className="week-grid slide-in">
             {DAYS.map((day, i) => {
-              const holiday = holidayForDate(weekDates[i]);
+              const hol = holidayFor(weekDates[i]);
               return (
-              <div key={i} className="day-col week-day-col" onClick={() => { setSelectedDay(i); setView("day"); }} style={{
-                background: holiday ? "rgba(255,211,61,0.07)" : i === todayIndex ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)",
-                borderRadius: 16, padding: "12px",
-                border: holiday ? "1px solid rgba(255,211,61,0.25)" : i === todayIndex ? "1px solid rgba(255,255,255,0.2)" : "1px solid rgba(255,255,255,0.05)",
-                cursor: "pointer", minHeight: 160,
-              }}>
-                <div className="day-inner">
-                  <div className="day-date" style={{ marginBottom: 10 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.5, textTransform: "uppercase", letterSpacing: 1 }}>{day}</div>
-                    <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "'Space Mono', monospace", color: i === todayIndex ? "#FF6B6B" : holiday ? "#FFD93D" : "inherit" }}>{weekDates[i].getDate()}</div>
-                    {holiday && <div style={{ fontSize: 9, color: "#FFD93D", fontWeight: 700, marginTop: 2, lineHeight: 1.2 }}>{holiday}</div>}
-                  </div>
-                  <div className="day-tasks" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    {tasksByDay(i).slice(0, 5).map(t => {
-                      const firstUser = t.userIds === null ? { color: "#888" } : allUsers.find(u => u.id == t.userIds?.[0]) || { color: "#888" };
-                      const c = categories.find(c => c.id === t.category) || { icon: "🏷️" };
-                      return (
-                        <div key={t.id} style={{
-                          background: firstUser.color + "22", borderLeft: `3px solid ${firstUser.color}`,
-                          borderRadius: "0 6px 6px 0", padding: "4px 6px",
-                          fontSize: 11, fontWeight: 600, opacity: t.done ? 0.4 : 1,
-                          overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", color: "#f0f0f0",
-                        }}>{c.icon} {t.title}</div>
-                      );
-                    })}
-                    {tasksByDay(i).length > 5 && <div style={{ fontSize: 10, opacity: 0.4 }}>+{tasksByDay(i).length - 5} meer</div>}
-                    {tasksByDay(i).length === 0 && !holiday && <div style={{ fontSize: 11, opacity: 0.25, fontStyle: "italic" }}>Vrij</div>}
-                    {tasksByDay(i).length === 0 && holiday && <div style={{ fontSize: 11, color: "#FFD93D", opacity: 0.6, fontStyle: "italic" }}>Feestdag 🎉</div>}
+                <div key={i} className="day-col week-day-col" onClick={() => { setSelectedDay(i); setView("day"); }} style={{ background:hol?"rgba(255,211,61,0.07)":i===todayIndex?"rgba(255,255,255,0.08)":"rgba(255,255,255,0.03)",borderRadius:16,padding:"12px",border:hol?"1px solid rgba(255,211,61,0.25)":i===todayIndex?"1px solid rgba(255,255,255,0.2)":"1px solid rgba(255,255,255,0.05)",cursor:"pointer",minHeight:160 }}>
+                  <div className="day-inner">
+                    <div className="day-date" style={{ marginBottom:8 }}>
+                      <div style={{ fontSize:10,fontWeight:700,opacity:0.5,textTransform:"uppercase",letterSpacing:1 }}>{day}</div>
+                      <div style={{ fontSize:20,fontWeight:900,fontFamily:"'Space Mono',monospace",color:i===todayIndex?"#FF6B6B":hol?"#FFD93D":"inherit" }}>{weekDates[i].getDate()}</div>
+                      {hol && <div style={{ fontSize:9,color:"#FFD93D",fontWeight:700,marginTop:2,lineHeight:1.2 }}>{hol}</div>}
+                    </div>
+                    <div className="day-tasks" style={{ display:"flex",flexDirection:"column",gap:4 }}>
+                      {tasksByDay(i).slice(0,5).map(t => {
+                        const fu = t.userIds===null ? { color:"#888" } : (allUsers.find(u => u.id==t.userIds?.[0]) || { color:"#888" });
+                        const ft = t.teamIds?.length ? allTeams.find(tm => tm.id==t.teamIds[0]) : null;
+                        const clr = fu.color!=="	#888" ? fu.color : (ft?.color||"#888");
+                        const ct = categories.find(c => c.id===t.category) || { icon:"🏷️" };
+                        return <div key={t.id} style={{ background:clr+"22",borderLeft:`3px solid ${clr}`,borderRadius:"0 6px 6px 0",padding:"3px 6px",fontSize:11,fontWeight:600,opacity:t.done?0.4:1,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",color:"#f0f0f0" }}>{ct.icon} {t.title}</div>;
+                      })}
+                      {tasksByDay(i).length>5 && <div style={{ fontSize:10,opacity:0.4 }}>+{tasksByDay(i).length-5} meer</div>}
+                      {tasksByDay(i).length===0 && !hol && <div style={{ fontSize:11,opacity:0.25,fontStyle:"italic" }}>Vrij</div>}
+                      {tasksByDay(i).length===0 && hol && <div style={{ fontSize:11,color:"#FFD93D",opacity:0.6,fontStyle:"italic" }}>Feestdag 🎉</div>}
+                    </div>
                   </div>
                 </div>
-              </div>
               );
             })}
           </div>
         )}
 
         {/* DAY VIEW */}
-        {view === "day" && (
+        {view==="day" && (
           <div className="slide-in">
-            <div style={{ display: "flex", gap: 6, marginBottom: 20, overflowX: "auto", paddingBottom: 4 }}>
-              {DAYS.map((d, i) => (
-                <button key={i} onClick={() => setSelectedDay(i)} style={{
-                  background: selectedDay === i ? (i === todayIndex ? "#FF6B6B" : "rgba(255,255,255,0.15)") : "rgba(255,255,255,0.04)",
-                  border: "none", borderRadius: 12, padding: "8px 16px",
-                  color: selectedDay === i ? "#fff" : "rgba(255,255,255,0.5)",
-                  cursor: "pointer", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap", flexShrink: 0,
-                }}>{d} {weekDates[i].getDate()}</button>
-              ))}
+            <div style={{ display:"flex",gap:6,marginBottom:16,overflowX:"auto",paddingBottom:4 }}>
+              {DAYS.map((d,i) => <button key={i} onClick={() => setSelectedDay(i)} style={{ background:selectedDay===i?(i===todayIndex?"#FF6B6B":"rgba(255,255,255,0.15)"):"rgba(255,255,255,0.04)",border:"none",borderRadius:12,padding:"7px 14px",color:selectedDay===i?"#fff":"rgba(255,255,255,0.5)",cursor:"pointer",fontWeight:700,fontSize:12,whiteSpace:"nowrap",flexShrink:0 }}>{d} {weekDates[i].getDate()}</button>)}
             </div>
-            <h2 style={{ fontSize: 22, fontWeight: 900, marginBottom: holidayForDate(weekDates[selectedDay]) ? 6 : 16, fontFamily: "'Space Mono', monospace" }}>
-              {DAYS_FULL[selectedDay]} <span style={{ opacity: 0.4, fontWeight: 400, fontSize: 16 }}>{formatDate(weekDates[selectedDay])}</span>
+            <h2 style={{ fontSize:20,fontWeight:900,marginBottom:holidayFor(weekDates[selectedDay])?6:14,fontFamily:"'Space Mono',monospace" }}>
+              {DAYS_FULL[selectedDay]} <span style={{ opacity:0.4,fontWeight:400,fontSize:14 }}>{formatDate(weekDates[selectedDay])}</span>
             </h2>
-            {holidayForDate(weekDates[selectedDay]) && (
-              <div style={{ background: "rgba(255,211,61,0.12)", border: "1px solid rgba(255,211,61,0.3)", borderRadius: 10, padding: "8px 14px", marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 16 }}>🎉</span>
-                <span style={{ color: "#FFD93D", fontWeight: 700, fontSize: 13 }}>{holidayForDate(weekDates[selectedDay])}</span>
-              </div>
-            )}
-            {tasksByDay(selectedDay).length === 0 ? (
-              <div style={{ textAlign: "center", padding: "60px 20px", opacity: 0.3 }}>
-                <div style={{ fontSize: 48, marginBottom: 12 }}>😴</div>
-                <div style={{ fontSize: 16, fontWeight: 600 }}>Niks gepland!</div>
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {tasksByDay(selectedDay).sort((a, b) => a.deadline.localeCompare(b.deadline)).map(t => (
-                  <TaskCard key={t.id} task={t} onToggle={toggleDone} onDelete={deleteTask} onEdit={openEditModal} categories={categories} allUsers={allUsers} />
-                ))}
-              </div>
-            )}
+            {holidayFor(weekDates[selectedDay]) && <div style={{ background:"rgba(255,211,61,0.12)",border:"1px solid rgba(255,211,61,0.3)",borderRadius:10,padding:"7px 14px",marginBottom:14,display:"inline-flex",alignItems:"center",gap:8 }}><span>🎉</span><span style={{ color:"#FFD93D",fontWeight:700,fontSize:13 }}>{holidayFor(weekDates[selectedDay])}</span></div>}
+            {tasksByDay(selectedDay).length===0
+              ? <div style={{ textAlign:"center",padding:"60px 20px",opacity:0.3 }}><div style={{ fontSize:48,marginBottom:12 }}>😴</div><div style={{ fontSize:16,fontWeight:600 }}>Niks gepland!</div></div>
+              : <div style={{ display:"flex",flexDirection:"column",gap:10 }}>{tasksByDay(selectedDay).sort((a,b) => a.deadline.localeCompare(b.deadline)).map(t => <TaskCard key={t.id} task={t} onToggle={toggleDone} onDelete={deleteTask} onEdit={openEditModal} categories={categories} allUsers={allUsers} allTeams={allTeams} />)}</div>
+            }
           </div>
         )}
 
         {/* TASKS VIEW */}
-        {view === "tasks" && (
+        {view==="tasks" && (
           <div className="slide-in">
             {categories.map(c => {
-              const catTasks = filtered.filter(t => t.category === c.id);
-              if (!catTasks.length) return null;
+              const ct = filtered.filter(t => t.category===c.id);
+              if (!ct.length) return null;
               return (
-                <div key={c.id} style={{ marginBottom: 28 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, opacity: 0.7, letterSpacing: 1, textTransform: "uppercase" }}>
-                    {c.icon} {c.label}
-                    <span style={{ background: "rgba(255,255,255,0.1)", borderRadius: 20, padding: "2px 8px", fontSize: 11, marginLeft: 8 }}>{catTasks.length}</span>
-                  </h3>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {catTasks.sort((a, b) => a.dayIndex - b.dayIndex).map(t => (
-                      <TaskCard key={t.id} task={t} onToggle={toggleDone} onDelete={deleteTask} onEdit={openEditModal} showDay categories={categories} allUsers={allUsers} />
-                    ))}
+                <div key={c.id} style={{ marginBottom:24 }}>
+                  <h3 style={{ fontSize:13,fontWeight:800,marginBottom:10,opacity:0.7,letterSpacing:1,textTransform:"uppercase" }}>{c.icon} {c.label} <span style={{ background:"rgba(255,255,255,0.1)",borderRadius:20,padding:"2px 8px",fontSize:11,marginLeft:6 }}>{ct.length}</span></h3>
+                  <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
+                    {ct.sort((a,b) => a.dayIndex-b.dayIndex).map(t => <TaskCard key={t.id} task={t} onToggle={toggleDone} onDelete={deleteTask} onEdit={openEditModal} showDay categories={categories} allUsers={allUsers} allTeams={allTeams} />)}
                   </div>
                 </div>
               );
             })}
-            {filtered.length === 0 && (
-              <div style={{ textAlign: "center", padding: "60px 20px", opacity: 0.3 }}>
-                <div style={{ fontSize: 48, marginBottom: 12 }}>📭</div>
-                <div style={{ fontSize: 16, fontWeight: 600 }}>Geen taken gevonden</div>
-              </div>
-            )}
+            {filtered.length===0 && <div style={{ textAlign:"center",padding:"60px 20px",opacity:0.3 }}><div style={{ fontSize:48,marginBottom:12 }}>📭</div><div style={{ fontSize:16,fontWeight:600 }}>Geen taken gevonden</div></div>}
           </div>
         )}
 
-        {/* Stats / filters */}
-        <div style={{ marginTop: 32, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+        {/* STATS */}
+        <div style={{ marginTop:24,display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10 }}>
           {[
-            { key: "all",  label: "Totaal", value: tasks.filter(t => (filterUser === "all" || t.userIds === null || t.userIds?.includes(parseInt(filterUser))) && t.weekMonday === currentMonday).length, icon: "📋", color: "#7c7cff" },
-            { key: "done", label: "Gedaan", value: tasks.filter(t => (filterUser === "all" || t.userIds === null || t.userIds?.includes(parseInt(filterUser))) && t.weekMonday === currentMonday && t.done).length, icon: "✅", color: "#4ECDC4" },
-            { key: "open", label: "Open",   value: tasks.filter(t => (filterUser === "all" || t.userIds === null || t.userIds?.includes(parseInt(filterUser))) && t.weekMonday === currentMonday && !t.done).length, icon: "⏳", color: "#FF6B6B" },
+            { key:"all",label:"Totaal",value:tasks.filter(t => t.weekMonday===currentMonday).length,icon:"📋",color:"#7c7cff" },
+            { key:"done",label:"Gedaan",value:tasks.filter(t => t.weekMonday===currentMonday&&t.done).length,icon:"✅",color:"#4ECDC4" },
+            { key:"open",label:"Open",value:tasks.filter(t => t.weekMonday===currentMonday&&!t.done).length,icon:"⏳",color:"#FF6B6B" },
           ].map(s => (
-            <div key={s.key} onClick={() => setFilterDone(s.key)} style={{
-              background: filterDone === s.key ? `${s.color}22` : "rgba(255,255,255,0.04)",
-              borderRadius: 16, padding: "16px 20px",
-              border: filterDone === s.key ? `1px solid ${s.color}66` : "1px solid rgba(255,255,255,0.06)",
-              textAlign: "center", cursor: "pointer", transition: "all 0.2s",
-            }}>
-              <div style={{ fontSize: 24, marginBottom: 4 }}>{s.icon}</div>
-              <div style={{ fontSize: 28, fontWeight: 900, fontFamily: "'Space Mono', monospace", color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 12, opacity: filterDone === s.key ? 0.9 : 0.5, marginTop: 2, fontWeight: 700 }}>{s.label}</div>
+            <div key={s.key} onClick={() => setFilterDone(s.key)} style={{ background:filterDone===s.key?s.color+"22":"rgba(255,255,255,0.04)",borderRadius:14,padding:"14px 16px",textAlign:"center",cursor:"pointer",border:filterDone===s.key?`1px solid ${s.color}55`:"1px solid rgba(255,255,255,0.06)",transition:"all 0.2s" }}>
+              <div style={{ fontSize:22,marginBottom:4 }}>{s.icon}</div>
+              <div style={{ fontSize:26,fontWeight:900,fontFamily:"'Space Mono',monospace",color:s.color }}>{s.value}</div>
+              <div style={{ fontSize:11,opacity:filterDone===s.key?0.9:0.5,marginTop:2,fontWeight:700 }}>{s.label}</div>
             </div>
           ))}
         </div>
       </div>
 
       {/* FAB */}
-      <button className="btn-pulse" onClick={() => openModal(selectedDay)} style={{
-        position: "fixed", bottom: "calc(28px + env(safe-area-inset-bottom))", right: 24,
-        background: `linear-gradient(135deg, ${currentUser.color}, ${currentUser.color}bb)`,
-        color: "#fff", border: "none", borderRadius: "50%",
-        width: 60, height: 60, fontSize: 28, cursor: "pointer",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontWeight: 900, zIndex: 200,
-      }}>+</button>
+      <button className="btn-pulse" onClick={() => openModal(selectedDay)} style={{ position:"fixed",bottom:"calc(28px + env(safe-area-inset-bottom))",right:24,background:`linear-gradient(135deg,${currentUser.color},${currentUser.color}bb)`,color:"#fff",border:"none",borderRadius:"50%",width:60,height:60,fontSize:28,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200 }}>+</button>
+      <button onClick={() => setShowLabelManager(true)} style={{ position:"fixed",bottom:"calc(28px + env(safe-area-inset-bottom))",left:24,background:"rgba(255,255,255,0.08)",color:"#fff",border:"1px solid rgba(255,255,255,0.15)",borderRadius:"50%",width:50,height:50,fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200 }}>🏷️</button>
 
-      {/* Label manager knop */}
-      <button onClick={() => setShowLabelManager(true)} style={{
-        position: "fixed", bottom: "calc(28px + env(safe-area-inset-bottom))", left: 24,
-        background: "rgba(255,255,255,0.08)", color: "#fff",
-        border: "1px solid rgba(255,255,255,0.15)", borderRadius: "50%",
-        width: 50, height: 50, fontSize: 20, cursor: "pointer",
-        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200,
-      }}>🏷️</button>
-
-      {/* Modal - nieuwe taak */}
+      {/* TAAK MODAL */}
       {showModal && (
-        <div onClick={() => { setShowModal(false); setEditingTask(null); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 500, backdropFilter: "blur(4px)" }}>
-          <div className="slide-in" onClick={e => e.stopPropagation()} style={{ background: "linear-gradient(180deg, #1e1e3f, #16163a)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "24px 24px 0 0", padding: "28px 24px 40px", width: "100%", maxWidth: 500, maxHeight: "90vh", overflowY: "auto" }}>
-            <h3 style={{ fontSize: 18, fontWeight: 900, color: "#f0f0f0", fontFamily: "'Space Mono', monospace", marginBottom: 20 }}>
-              {editingTask ? "✏️ Taak wijzigen" : "➕ Nieuwe taak"}
-            </h3>
+        <div onClick={() => { setShowModal(false); setEditingTask(null); }} style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:500,backdropFilter:"blur(4px)" }}>
+          <div className="slide-in" onClick={e => e.stopPropagation()} style={{ background:"linear-gradient(180deg,#1e1e3f,#16163a)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto" }}>
+            <h3 style={{ fontSize:17,fontWeight:900,color:"#f0f0f0",fontFamily:"'Space Mono',monospace",marginBottom:18 }}>{editingTask?"✏️ Taak wijzigen":"➕ Nieuwe taak"}</h3>
+            <input placeholder="Wat moet er gebeuren?" value={form.title} onChange={e => setForm(f => ({ ...f,title:e.target.value }))} onKeyDown={e => e.key==="Enter" && saveTask()} style={{ width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:"13px 15px",color:"#fff",fontSize:15,marginBottom:14,outline:"none" }} />
 
-            <input placeholder="Wat moet er gebeuren?" value={form.title}
-              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-              onKeyDown={e => e.key === "Enter" && saveTask()}
-              style={{ width: "100%", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "14px 16px", color: "#fff", fontSize: 15, marginBottom: 16, outline: "none" }}
-            />
-
-            {/* Voor wie — meerdere gebruikers mogelijk */}
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 11, opacity: 0.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 8, color: "#fff" }}>Voor wie</label>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {/* Iedereen knop — deselecteert alle individuen */}
-                <button onClick={() => setForm(f => ({ ...f, userIds: [] }))} style={{
-                  background: form.userIds.length === 0 ? "#888" : "rgba(255,255,255,0.06)",
-                  color: "#fff", border: form.userIds.length === 0 ? "1px solid #888" : "1px solid transparent",
-                  borderRadius: 20, padding: "6px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                  opacity: form.userIds.length === 0 ? 1 : 0.5, transition: "all 0.15s",
-                }}>👥 Iedereen</button>
+            {/* Voor wie */}
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:8 }}>Voor wie</label>
+              <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
+                <button onClick={() => setForm(f => ({ ...f,userIds:[] }))} style={{ background:form.userIds.length===0?"#888":"rgba(255,255,255,0.06)",color:"#fff",border:form.userIds.length===0?"1px solid #aaa":"1px solid transparent",borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:700,cursor:"pointer",opacity:form.userIds.length===0?1:0.5 }}>👥 Iedereen</button>
                 {allUsers.map(u => {
                   const active = form.userIds.includes(u.id);
-                  return (
-                    <button key={u.id} onClick={() => {
-                      setForm(f => ({
-                        ...f,
-                        userIds: active
-                          ? f.userIds.filter(id => id !== u.id)
-                          : [...f.userIds, u.id]
-                      }));
-                    }} style={{
-                      background: active ? u.color : "rgba(255,255,255,0.06)",
-                      color: "#fff", border: active ? `1px solid ${u.color}` : "1px solid transparent",
-                      borderRadius: 20, padding: "6px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                      opacity: active ? 1 : 0.5, transition: "all 0.15s",
-                      position: "relative",
-                    }}>
-                      {u.username[0].toUpperCase()} {u.username}
-                      {active && <span style={{ marginLeft: 4, fontSize: 11 }}>✓</span>}
-                    </button>
-                  );
+                  return <button key={u.id} onClick={() => setForm(f => ({ ...f,userIds:active?f.userIds.filter(id => id!==u.id):[...f.userIds,u.id] }))} style={{ background:active?u.color:"rgba(255,255,255,0.06)",color:"#fff",border:active?`1px solid ${u.color}`:"1px solid transparent",borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:700,cursor:"pointer",opacity:active?1:0.5 }}>{u.username[0].toUpperCase()} {u.username}{active?" ✓":""}</button>;
                 })}
               </div>
-              <p style={{ fontSize: 11, opacity: 0.35, marginTop: 6 }}>
-                {form.userIds.length === 0 ? "Taak is voor iedereen" : `Geselecteerd: ${form.userIds.length} persoon${form.userIds.length > 1 ? 'en' : ''}`}
-              </p>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+            {/* Team */}
+            {myApprovedTeams.length > 0 && (
+              <div style={{ marginBottom:14 }}>
+                <label style={{ fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:8 }}>Koppel aan team (optioneel)</label>
+                <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
+                  {myApprovedTeams.map(team => {
+                    const active = form.teamIds.includes(team.id);
+                    const tc = team.color||"#7c7cff";
+                    return <button key={team.id} onClick={() => setForm(f => ({ ...f,teamIds:active?f.teamIds.filter(id => id!==team.id):[...f.teamIds,team.id] }))} style={{ background:active?tc+"33":"rgba(255,255,255,0.06)",color:active?tc:"rgba(255,255,255,0.55)",border:active?`1px solid ${tc}`:"1px solid transparent",borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:700,cursor:"pointer" }}>👥 {team.name}{active?" ✓":""}</button>;
+                  })}
+                </div>
+                {form.teamIds.length > 0 && <p style={{ fontSize:11,opacity:0.35,marginTop:5 }}>Alleen teamleden kunnen deze taak zien</p>}
+              </div>
+            )}
+
+            {/* Tijdstip + dag */}
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14 }}>
               <div>
-                <label style={{ fontSize: 11, opacity: 0.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 6, color: "#fff" }}>Tijdstip</label>
-                <select value={form.deadline} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} style={{ width: "100%", background: "#2a2a5a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "10px 12px", color: "#fff", fontSize: 14, outline: "none", cursor: "pointer" }}>
+                <label style={{ fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6 }}>Tijdstip</label>
+                <select value={form.deadline} onChange={e => setForm(f => ({ ...f,deadline:e.target.value }))} style={{ width:"100%",background:"#2a2a5a",border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,padding:"9px 11px",color:"#fff",fontSize:13,outline:"none",cursor:"pointer" }}>
                   {TIME_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: 11, opacity: 0.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 6, color: "#fff" }}>Dag</label>
-                <select value={form.dayIndex} onChange={e => setForm(f => ({ ...f, dayIndex: parseInt(e.target.value) }))} style={{ width: "100%", background: "#2a2a5a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "10px 12px", color: "#fff", fontSize: 14, outline: "none", cursor: "pointer" }}>
-                  {DAYS.map((d, i) => <option key={i} value={i}>{d} {weekDates[i].getDate()}</option>)}
+                <label style={{ fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6 }}>Dag</label>
+                <select value={form.dayIndex} onChange={e => setForm(f => ({ ...f,dayIndex:parseInt(e.target.value) }))} style={{ width:"100%",background:"#2a2a5a",border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,padding:"9px 11px",color:"#fff",fontSize:13,outline:"none",cursor:"pointer" }}>
+                  {DAYS.map((d,i) => <option key={i} value={i}>{d} {weekDates[i].getDate()}</option>)}
                 </select>
               </div>
             </div>
 
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 11, opacity: 0.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 6, color: "#fff" }}>Label</label>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {categories.map(c => (
-                  <button key={c.id} onClick={() => setForm(f => ({ ...f, category: c.id }))} style={{
-                    background: form.category === c.id ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.05)", color: "#fff",
-                    border: form.category === c.id ? "1px solid rgba(255,255,255,0.3)" : "1px solid transparent",
-                    borderRadius: 10, padding: "8px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                  }}>{c.icon} {c.label}</button>
-                ))}
+            {/* Label */}
+            <div style={{ marginBottom:18 }}>
+              <label style={{ fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6 }}>Label</label>
+              <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
+                {categories.map(c => <button key={c.id} onClick={() => setForm(f => ({ ...f,category:c.id }))} style={{ background:form.category===c.id?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.05)",color:"#fff",border:form.category===c.id?"1px solid rgba(255,255,255,0.3)":"1px solid transparent",borderRadius:10,padding:"7px 11px",fontSize:12,fontWeight:600,cursor:"pointer" }}>{c.icon} {c.label}</button>)}
               </div>
             </div>
 
-            <button onClick={saveTask} disabled={saving} style={{
-              width: "100%", padding: "16px",
-              background: saving ? "rgba(255,255,255,0.1)" : `linear-gradient(135deg, ${currentUser.color}, ${currentUser.color}bb)`,
-              color: "#fff", border: "none", borderRadius: 14, fontSize: 16, fontWeight: 800, cursor: saving ? "not-allowed" : "pointer",
-            }}>{saving ? "Opslaan..." : editingTask ? "Wijzigingen opslaan ✓" : "Taak toevoegen 🚀"}</button>
+            <button onClick={saveTask} disabled={saving} style={{ width:"100%",padding:"15px",background:saving?"rgba(255,255,255,0.1)":`linear-gradient(135deg,${currentUser.color},${currentUser.color}bb)`,color:"#fff",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:saving?"not-allowed":"pointer" }}>{saving?"Opslaan...":editingTask?"Wijzigingen opslaan ✓":"Taak toevoegen 🚀"}</button>
           </div>
         </div>
       )}
 
-      {/* Label manager modal */}
+      {/* LABEL MANAGER */}
       {showLabelManager && (
-        <div onClick={() => setShowLabelManager(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 500, backdropFilter: "blur(4px)" }}>
-          <div className="slide-in" onClick={e => e.stopPropagation()} style={{ background: "linear-gradient(180deg, #1e1e3f, #16163a)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "24px 24px 0 0", padding: "28px 24px 40px", width: "100%", maxWidth: 500, maxHeight: "90vh", overflowY: "auto" }}>
-            <h3 style={{ fontSize: 20, fontWeight: 900, marginBottom: 6, color: "#f0f0f0", fontFamily: "'Space Mono', monospace" }}>🏷️ Labels beheren</h3>
-            <p style={{ fontSize: 12, opacity: 0.4, marginBottom: 20 }}>Maak je eigen labels aan voor taken</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
+        <div onClick={() => setShowLabelManager(false)} style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:500,backdropFilter:"blur(4px)" }}>
+          <div className="slide-in" onClick={e => e.stopPropagation()} style={{ background:"linear-gradient(180deg,#1e1e3f,#16163a)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",width:"100%",maxWidth:500,maxHeight:"90vh",overflowY:"auto" }}>
+            <h3 style={{ fontSize:18,fontWeight:900,marginBottom:4,color:"#f0f0f0",fontFamily:"'Space Mono',monospace" }}>🏷️ Labels beheren</h3>
+            <p style={{ fontSize:12,opacity:0.4,marginBottom:18 }}>Maak je eigen labels aan</p>
+            <div style={{ display:"flex",flexDirection:"column",gap:8,marginBottom:20 }}>
               {categories.map(c => (
-                <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: "12px 16px" }}>
-                  <span style={{ fontSize: 15, fontWeight: 600 }}>{c.icon} {c.label}</span>
-                  <button onClick={() => deleteLabel(c.id)} style={{ background: "rgba(255,100,100,0.15)", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", color: "#FF6B6B", fontSize: 12, fontWeight: 700 }}>Verwijder</button>
+                <div key={c.id} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",background:"rgba(255,255,255,0.05)",borderRadius:12,padding:"11px 14px" }}>
+                  <span style={{ fontSize:14,fontWeight:600 }}>{c.icon} {c.label}</span>
+                  <button onClick={() => deleteLabel(c.id)} style={{ background:"rgba(255,100,100,0.15)",border:"none",borderRadius:8,padding:"4px 10px",cursor:"pointer",color:"#FF6B6B",fontSize:12,fontWeight:700 }}>Verwijder</button>
                 </div>
               ))}
             </div>
-            <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 20 }}>
-              <label style={{ fontSize: 11, opacity: 0.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", display: "block", marginBottom: 10, color: "#fff" }}>Nieuw label</label>
-              <input placeholder="Naam van label..." value={newLabel.label} onChange={e => setNewLabel(l => ({ ...l, label: e.target.value }))} onKeyDown={e => e.key === "Enter" && addLabel()}
-                style={{ width: "100%", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "10px 14px", color: "#fff", fontSize: 14, outline: "none", marginBottom: 12 }} />
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
-                {LABEL_ICONS.map(icon => (
-                  <button key={icon} onClick={() => setNewLabel(l => ({ ...l, icon }))} style={{ width: 36, height: 36, borderRadius: 8, fontSize: 18, background: newLabel.icon === icon ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.05)", border: newLabel.icon === icon ? "1px solid rgba(255,255,255,0.4)" : "1px solid transparent", cursor: "pointer" }}>{icon}</button>
-                ))}
+            <div style={{ borderTop:"1px solid rgba(255,255,255,0.08)",paddingTop:18 }}>
+              <input placeholder="Naam van label..." value={newLabel.label} onChange={e => setNewLabel(l => ({ ...l,label:e.target.value }))} onKeyDown={e => e.key==="Enter" && addLabel()} style={{ width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,padding:"10px 14px",color:"#fff",fontSize:14,outline:"none",marginBottom:12 }} />
+              <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:14 }}>
+                {LABEL_ICONS.map(icon => <button key={icon} onClick={() => setNewLabel(l => ({ ...l,icon }))} style={{ width:34,height:34,borderRadius:8,fontSize:17,background:newLabel.icon===icon?"rgba(255,255,255,0.2)":"rgba(255,255,255,0.05)",border:newLabel.icon===icon?"1px solid rgba(255,255,255,0.4)":"1px solid transparent",cursor:"pointer" }}>{icon}</button>)}
               </div>
-              <button onClick={addLabel} style={{ width: "100%", padding: "14px", background: "linear-gradient(135deg, #4ECDC4, #2ecc71)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 800, cursor: "pointer" }}>+ Label toevoegen</button>
+              <button onClick={addLabel} style={{ width:"100%",padding:"13px",background:"linear-gradient(135deg,#4ECDC4,#2ecc71)",color:"#fff",border:"none",borderRadius:12,fontSize:14,fontWeight:800,cursor:"pointer" }}>+ Label toevoegen</button>
             </div>
           </div>
         </div>
