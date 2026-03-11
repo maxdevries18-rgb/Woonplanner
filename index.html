@@ -27,6 +27,8 @@
     @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,107,107,0.4);}50%{box-shadow:0 0 0 8px rgba(255,107,107,0);} }
     .slide-in { animation: slideIn 0.3s ease; }
     @keyframes slideIn { from{opacity:0;transform:translateY(-10px);}to{opacity:1;transform:translateY(0);} }
+    .slide-left { animation: slideLeft 0.25s ease; }
+    @keyframes slideLeft { from{opacity:0;transform:translateX(-20px);}to{opacity:1;transform:translateX(0);} }
     .notif { animation: notifIn 0.3s ease; }
     @keyframes notifIn { from{opacity:0;transform:translateX(100px);}to{opacity:1;transform:translateX(0);} }
     .spinner { width:40px;height:40px;border:3px solid rgba(255,255,255,0.1);border-top-color:#FF6B6B;border-radius:50%;animation:spin 0.8s linear infinite; }
@@ -34,11 +36,15 @@
     .color-swatch { width:32px;height:32px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:all 0.15s; }
     .color-swatch:hover { transform:scale(1.15); } .color-swatch.selected { border-color:#fff;transform:scale(1.15); }
     input::placeholder { color:rgba(255,255,255,0.3); }
+    textarea::placeholder { color:rgba(255,255,255,0.3); }
     .week-grid { display:grid;grid-template-columns:repeat(7,1fr);gap:8px; }
     .toggle { position:relative;width:40px;height:22px;background:rgba(255,255,255,0.1);border-radius:11px;cursor:pointer;transition:background 0.2s;border:none;flex-shrink:0; }
     .toggle.on { background:#4ECDC4; }
     .toggle::after { content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform 0.2s; }
     .toggle.on::after { transform:translateX(18px); }
+    .menu-overlay { position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:800;backdrop-filter:blur(3px); }
+    .menu-panel { position:fixed;top:0;left:0;bottom:0;width:280px;background:linear-gradient(180deg,#1e1e3f,#16163a);border-right:1px solid rgba(255,255,255,0.08);z-index:801;padding:0;display:flex;flex-direction:column;animation:slideFromLeft 0.25s ease; }
+    @keyframes slideFromLeft { from{transform:translateX(-100%);}to{transform:translateX(0);} }
     @media (max-width:600px) {
       .week-grid { display:flex;flex-direction:column;gap:8px; }
       .week-day-col { width:100%;min-height:auto !important; }
@@ -51,7 +57,7 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useCallback, useMemo } = React;
+const { useState, useEffect, useCallback, useMemo, useRef } = React;
 const SUPABASE_URL = 'https://rywkfqjatnrrmsuhupai.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_fhfWC4TvyS_uZAF1NDiPYg_bGtebyQ5';
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -68,7 +74,13 @@ const TIME_OPTIONS = [{value:"hele_dag",label:"🌅 Hele dag"},...["07","08","09
 const LABEL_ICONS = ["🏷️","🧹","📅","💼","⚽","🎨","🎵","🍕","💪","📚","🚗","🐶","🌿","🛒","💊","🎮","✈️","💰","🏠","👥"];
 const DAYS = ["Ma","Di","Wo","Do","Vr","Za","Zo"];
 const DAYS_FULL = ["Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag","Zondag"];
-
+const RECURRENCE_OPTIONS = [
+  {value:"none",label:"Niet herhalen"},
+  {value:"weekly",label:"Elke week"},
+  {value:"biweekly",label:"Om de 2 weken"},
+  {value:"monthly",label:"Elke maand (zelfde datum)"},
+  {value:"monthly_last",label:"Laatste van de maand (zelfde dag)"},
+];
 const RECHTEN = [
   {key:"can_create_tasks",label:"Taken aanmaken"},
   {key:"can_edit_own_tasks",label:"Eigen taken bewerken"},
@@ -80,6 +92,7 @@ const RECHTEN = [
   {key:"can_view_users",label:"Gebruikers inzien"},
 ];
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function getWeekDates(off) {
   off = off || 0;
   const now = new Date();
@@ -96,17 +109,389 @@ function getWeekNumber(date) {
 function formatDate(d) {
   return d.getDate()+" "+["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"][d.getMonth()];
 }
+function getMondayStr(date) {
+  const d = new Date(date);
+  d.setDate(d.getDate()-((d.getDay()+6)%7));
+  return d.toISOString().split("T")[0];
+}
 function normalizeTask(t,teamIds) {
   let userIds=null;
   if(t.user_id!==null&&t.user_id!==undefined&&t.user_id!==""){
     userIds=String(t.user_id).split(",").map(s=>parseInt(s)).filter(n=>!isNaN(n));
   }
-  return {id:t.id,title:t.title,userIds,category:t.category,dayIndex:t.day_index,done:t.done,deadline:t.deadline||"",weekMonday:t.week_monday||null,teamIds:teamIds||[]};
+  return {
+    id:t.id,title:t.title,userIds,category:t.category,
+    dayIndex:t.day_index,done:t.done,deadline:t.deadline||"",
+    weekMonday:t.week_monday||null,teamIds:teamIds||[],
+    notes:t.notes||"",
+    recurrenceType:t.recurrence_type||null,
+    recurrenceDay:t.recurrence_day!=null?t.recurrence_day:null,
+    isRecurring:!!t.recurrence_type,
+  };
 }
 
-// ── Toggle component ──────────────────────────────────────────────────────────
+// Bereken of een terugkerende taak in een gegeven week-maandag moet verschijnen
+function recurringTaskBelongsToWeek(task, mondayStr) {
+  if(!task.recurrenceType || task.recurrenceType==="none") return false;
+  const mon = new Date(mondayStr);
+  const orig = new Date(task.weekMonday);
+  if(mon <= orig) return false;
+
+  if(task.recurrenceType==="weekly") {
+    // Elke week op dezelfde dag (dayIndex)
+    return true;
+  }
+  if(task.recurrenceType==="biweekly") {
+    const diffDays = Math.round((mon - orig) / 86400000);
+    const diffWeeks = diffDays / 7;
+    return diffWeeks % 2 === 0;
+  }
+  if(task.recurrenceType==="monthly") {
+    // Zelfde dag van de maand - check of die dag in deze week valt
+    const origDate = orig.getDate() + task.dayIndex;
+    // Simplified: check if recurrenceDay (stored as day of month) falls in this week
+    for(let i=0;i<7;i++){
+      const d=new Date(mon); d.setDate(mon.getDate()+i);
+      if(d.getDate()===task.recurrenceDay) return true;
+    }
+    return false;
+  }
+  if(task.recurrenceType==="monthly_last") {
+    // Laatste [weekdag] van de maand
+    for(let i=0;i<7;i++){
+      const d=new Date(mon); d.setDate(mon.getDate()+i);
+      const dayOfWeek=(d.getDay()+6)%7;
+      if(dayOfWeek===task.dayIndex){
+        // Check if this is the last occurrence of this weekday in the month
+        const nextWeek=new Date(d); nextWeek.setDate(d.getDate()+7);
+        if(nextWeek.getMonth()!==d.getMonth()) return true;
+      }
+    }
+    return false;
+  }
+  return false;
+}
+
 function Toggle({value,onChange}) {
   return <button className={`toggle${value?" on":""}`} onClick={()=>onChange(!value)} />;
+}
+
+// ── Hamburger Menu ─────────────────────────────────────────────────────────────
+function HamburgerMenu({currentUser,pendingCount,onOpenBeheer,onOpenLabels,onOpenStats,onOpenBoodschappen,onWissel,onClose}) {
+  const menuItems = [
+    {icon:"⚙️", label:"Teams beheren", badge:pendingCount>0?pendingCount:null, onClick:()=>{onOpenBeheer("teams");onClose();}},
+    {icon:"👤", label:"Gebruikers beheren", show:currentUser.is_admin||currentUser.can_view_users, onClick:()=>{onOpenBeheer("gebruikers");onClose();}},
+    {icon:"🏷️", label:"Labels beheren", onClick:()=>{onOpenLabels();onClose();}},
+    {icon:"📊", label:"Statistieken", onClick:()=>{onOpenStats();onClose();}},
+    {icon:"🛒", label:"Boodschappenlijst", onClick:()=>{onOpenBoodschappen();onClose();}},
+  ];
+  return (
+    <div>
+      <div className="menu-overlay" onClick={onClose}/>
+      <div className="menu-panel">
+        {/* Gebruikersprofiel bovenaan */}
+        <div style={{padding:"calc(20px + env(safe-area-inset-top)) 20px 20px",borderBottom:"1px solid rgba(255,255,255,0.08)",background:"rgba(255,255,255,0.03)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div style={{width:44,height:44,borderRadius:"50%",background:currentUser.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:900,flexShrink:0}}>{currentUser.username[0].toUpperCase()}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:16,color:"#fff"}}>{currentUser.username}</div>
+              {currentUser.is_admin&&<div style={{fontSize:11,color:"#FFD93D",marginTop:2}}>👑 Beheerder</div>}
+            </div>
+          </div>
+        </div>
+        {/* Menu items */}
+        <div style={{flex:1,overflowY:"auto",padding:"12px 0"}}>
+          {menuItems.filter(m=>m.show!==false).map((item,i)=>(
+            <button key={i} onClick={item.onClick} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"13px 20px",background:"transparent",border:"none",color:"#f0f0f0",cursor:"pointer",textAlign:"left",transition:"background 0.15s",fontSize:15,fontWeight:600,position:"relative"}}
+              onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <span style={{fontSize:20,width:28,textAlign:"center",flexShrink:0}}>{item.icon}</span>
+              <span style={{flex:1}}>{item.label}</span>
+              {item.badge&&<span style={{background:"#FF6B6B",color:"#fff",borderRadius:20,padding:"2px 7px",fontSize:11,fontWeight:900}}>{item.badge}</span>}
+            </button>
+          ))}
+        </div>
+        {/* Wissel onderaan */}
+        <div style={{borderTop:"1px solid rgba(255,255,255,0.08)",padding:"12px 20px",paddingBottom:"calc(12px + env(safe-area-inset-bottom))"}}>
+          <button onClick={()=>{onWissel();onClose();}} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"11px 0",background:"transparent",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:14,fontWeight:600}}>
+            <span style={{fontSize:18,width:28,textAlign:"center"}}>👋</span>
+            Wissel van gebruiker
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Statistieken ──────────────────────────────────────────────────────────────
+function StatistiekenScherm({onClose,allUsers,allTeams,myTeamIds}) {
+  const [periode,setPeriode]=useState("week"); // week | maand | kwartaal | jaar
+  const [allTasks,setAllTasks]=useState([]);
+  const [loading,setLoading]=useState(true);
+
+  useEffect(()=>{
+    async function laad(){
+      setLoading(true);
+      const {data}=await supabase.from("tasks").select("*");
+      setAllTasks(data||[]);
+      setLoading(false);
+    }
+    laad();
+  },[]);
+
+  function getPeriodeStart() {
+    const now=new Date();
+    if(periode==="week"){const d=new Date(now);d.setDate(now.getDate()-((now.getDay()+6)%7));d.setHours(0,0,0,0);return d;}
+    if(periode==="maand"){return new Date(now.getFullYear(),now.getMonth(),1);}
+    if(periode==="kwartaal"){const q=Math.floor(now.getMonth()/3);return new Date(now.getFullYear(),q*3,1);}
+    if(periode==="jaar"){return new Date(now.getFullYear(),0,1);}
+    return new Date(0);
+  }
+
+  const periodeStart=getPeriodeStart();
+  const periodeLabel={"week":"Deze week","maand":"Deze maand","kwartaal":"Dit kwartaal","jaar":"Dit jaar"};
+
+  // Filter taken op periode (op basis van week_monday)
+  const periodeTaken=allTasks.filter(t=>{
+    if(!t.week_monday) return false;
+    return new Date(t.week_monday)>=periodeStart;
+  });
+
+  // Stats per gebruiker
+  const userStats=allUsers.map(u=>{
+    const uid=String(u.id);
+    const eigen=periodeTaken.filter(t=>{
+      if(!t.user_id) return true; // iedereen-taken tellen mee
+      return String(t.user_id).split(",").includes(uid);
+    });
+    const gedaan=eigen.filter(t=>t.done).length;
+    const totaal=eigen.length;
+    return {user:u,totaal,gedaan,open:totaal-gedaan,pct:totaal>0?Math.round(gedaan/totaal*100):0};
+  }).sort((a,b)=>b.gedaan-a.gedaan);
+
+  // Totalen
+  const totaalAlle=periodeTaken.length;
+  const gedaanAlle=periodeTaken.filter(t=>t.done).length;
+
+  // Wekelijkse grafiek (laatste 8 weken)
+  function getWeeklyData() {
+    const weeks=[];
+    for(let i=7;i>=0;i--){
+      const mon=new Date(); mon.setDate(mon.getDate()-((mon.getDay()+6)%7)-i*7);
+      const monStr=mon.toISOString().split("T")[0];
+      const weekTaken=allTasks.filter(t=>t.week_monday===monStr);
+      weeks.push({label:`W${getWeekNumber(mon)}`,gedaan:weekTaken.filter(t=>t.done).length,open:weekTaken.filter(t=>!t.done).length,totaal:weekTaken.length});
+    }
+    return weeks;
+  }
+  const weeklyData=getWeeklyData();
+  const maxVal=Math.max(...weeklyData.map(w=>w.totaal),1);
+
+  const periodes=[{k:"week",l:"Week"},{k:"maand",l:"Maand"},{k:"kwartaal",l:"Kwartaal"},{k:"jaar",l:"Jaar"}];
+
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:600,backdropFilter:"blur(4px)"}}>
+      <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(180deg,#1e1e3f,#16163a)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",width:"100%",maxWidth:580,maxHeight:"92vh",overflowY:"auto",fontFamily:"'DM Sans',sans-serif"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+          <h3 style={{fontSize:20,fontWeight:900,color:"#f0f0f0",fontFamily:"'Space Mono',monospace"}}>📊 Statistieken</h3>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:13}}>✕</button>
+        </div>
+
+        {/* Periode selector */}
+        <div style={{display:"flex",gap:6,marginBottom:20,background:"rgba(255,255,255,0.04)",borderRadius:12,padding:4}}>
+          {periodes.map(p=>(
+            <button key={p.k} onClick={()=>setPeriode(p.k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:periode===p.k?"rgba(255,255,255,0.15)":"transparent",color:periode===p.k?"#fff":"rgba(255,255,255,0.45)",transition:"all 0.15s"}}>{p.l}</button>
+          ))}
+        </div>
+
+        {loading&&<div style={{display:"flex",justifyContent:"center",padding:40}}><div className="spinner"/></div>}
+
+        {!loading&&(
+          <div>
+            {/* Totalen */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:20}}>
+              {[
+                {label:"Totaal",value:totaalAlle,icon:"📋",color:"#7c7cff"},
+                {label:"Gedaan",value:gedaanAlle,icon:"✅",color:"#4ECDC4"},
+                {label:"Open",value:totaalAlle-gedaanAlle,icon:"⏳",color:"#FF6B6B"},
+              ].map(s=>(
+                <div key={s.label} style={{background:s.color+"15",border:`1px solid ${s.color}33`,borderRadius:14,padding:"14px",textAlign:"center"}}>
+                  <div style={{fontSize:20,marginBottom:4}}>{s.icon}</div>
+                  <div style={{fontSize:28,fontWeight:900,fontFamily:"'Space Mono',monospace",color:s.color}}>{s.value}</div>
+                  <div style={{fontSize:11,opacity:0.6,marginTop:2,fontWeight:700}}>{s.label}</div>
+                  <div style={{fontSize:10,opacity:0.35,marginTop:1}}>{periodeLabel[periode]}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Per gebruiker */}
+            <div style={{marginBottom:20}}>
+              <p style={{fontSize:11,fontWeight:700,opacity:0.5,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Per persoon</p>
+              {userStats.map(s=>(
+                <div key={s.user.id} style={{background:"rgba(255,255,255,0.04)",borderLeft:`4px solid ${s.user.color}`,borderRadius:12,padding:"12px 16px",marginBottom:8}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",background:s.user.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900,flexShrink:0}}>{s.user.username[0].toUpperCase()}</div>
+                    <span style={{fontWeight:700,fontSize:14,flex:1}}>{s.user.username}</span>
+                    <span style={{fontSize:12,color:"#4ECDC4",fontWeight:700}}>{s.gedaan}/{s.totaal}</span>
+                    <span style={{fontSize:12,color:s.pct>=75?"#4ECDC4":s.pct>=50?"#FFD93D":"#FF6B6B",fontWeight:900}}>{s.pct}%</span>
+                  </div>
+                  {/* Voortgangsbalk */}
+                  <div style={{background:"rgba(255,255,255,0.08)",borderRadius:6,height:6,overflow:"hidden"}}>
+                    <div style={{width:`${s.pct}%`,height:"100%",background:s.user.color,borderRadius:6,transition:"width 0.5s ease"}}/>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Weekgrafiek */}
+            <div>
+              <p style={{fontSize:11,fontWeight:700,opacity:0.5,letterSpacing:1,textTransform:"uppercase",marginBottom:12}}>Afgelopen 8 weken</p>
+              <div style={{display:"flex",gap:6,alignItems:"flex-end",height:100}}>
+                {weeklyData.map((w,i)=>(
+                  <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                    <div style={{width:"100%",display:"flex",flexDirection:"column",gap:2,height:80,justifyContent:"flex-end"}}>
+                      <div style={{width:"100%",background:"#4ECDC4",borderRadius:"4px 4px 0 0",height:`${(w.gedaan/maxVal)*80}px`,transition:"height 0.4s ease",minHeight:w.gedaan>0?3:0}}/>
+                      <div style={{width:"100%",background:"rgba(255,107,107,0.4)",height:`${(w.open/maxVal)*80}px`,transition:"height 0.4s ease",minHeight:w.open>0?2:0}}/>
+                    </div>
+                    <div style={{fontSize:9,opacity:0.4,fontWeight:700}}>{w.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:16,marginTop:10}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:12,height:12,borderRadius:3,background:"#4ECDC4"}}/><span style={{fontSize:11,opacity:0.6}}>Gedaan</span></div>
+                <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:12,height:12,borderRadius:3,background:"rgba(255,107,107,0.4)"}}/><span style={{fontSize:11,opacity:0.6}}>Open</span></div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Boodschappenlijst ─────────────────────────────────────────────────────────
+function BoodschappenScherm({onClose,currentUser,myTeamIds,allTeams,showNotif}) {
+  const [items,setItems]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [newName,setNewName]=useState("");
+  const [newQty,setNewQty]=useState("");
+  const [filterTeam,setFilterTeam]=useState(myTeamIds[0]||null);
+  const [saving,setSaving]=useState(false);
+  const myTeams=allTeams.filter(t=>myTeamIds.includes(t.id));
+
+  useEffect(()=>{laad();},[filterTeam]);
+
+  async function laad(){
+    setLoading(true);
+    let q=supabase.from("shopping_items").select("*").order("created_at",{ascending:true});
+    if(filterTeam) q=q.eq("team_id",filterTeam);
+    else q=q.is("team_id",null);
+    const {data}=await q;
+    setItems(data||[]);
+    setLoading(false);
+  }
+
+  async function voegToe(){
+    if(!newName.trim()) return;
+    setSaving(true);
+    await supabase.from("shopping_items").insert([{name:newName.trim(),quantity:newQty.trim(),checked:false,team_id:filterTeam||null,added_by:currentUser.id}]);
+    setNewName(""); setNewQty(""); setSaving(false); laad();
+  }
+
+  async function toggleItem(id,cur){
+    setItems(prev=>prev.map(i=>i.id===id?{...i,checked:!cur}:i));
+    await supabase.from("shopping_items").update({checked:!cur}).eq("id",id);
+  }
+
+  async function verwijderItem(id){
+    setItems(prev=>prev.filter(i=>i.id!==id));
+    await supabase.from("shopping_items").delete().eq("id",id);
+  }
+
+  async function leegMaken(){
+    const checkedIds=items.filter(i=>i.checked).map(i=>i.id);
+    if(!checkedIds.length) return;
+    await supabase.from("shopping_items").delete().in("id",checkedIds);
+    setItems(prev=>prev.filter(i=>!i.checked));
+    showNotif("🗑️ Afgevinkte items verwijderd","");
+  }
+
+  const open=items.filter(i=>!i.checked);
+  const gedaan=items.filter(i=>i.checked);
+
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:600,backdropFilter:"blur(4px)"}}>
+      <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(180deg,#1e1e3f,#16163a)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto",fontFamily:"'DM Sans',sans-serif"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <h3 style={{fontSize:20,fontWeight:900,color:"#f0f0f0",fontFamily:"'Space Mono',monospace"}}>🛒 Boodschappenlijst</h3>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:13}}>✕</button>
+        </div>
+
+        {/* Team selector */}
+        {myTeams.length>0&&(
+          <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+            <button onClick={()=>setFilterTeam(null)} style={{background:filterTeam===null?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.05)",border:filterTeam===null?"1px solid rgba(255,255,255,0.25)":"1px solid transparent",borderRadius:20,padding:"5px 12px",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>👤 Persoonlijk</button>
+            {myTeams.map(t=>{const tc=t.color||"#7c7cff";const active=filterTeam===t.id;return(
+              <button key={t.id} onClick={()=>setFilterTeam(t.id)} style={{background:active?tc+"33":"rgba(255,255,255,0.05)",border:active?`1px solid ${tc}`:"1px solid transparent",borderRadius:20,padding:"5px 12px",color:active?tc:"rgba(255,255,255,0.5)",fontSize:12,fontWeight:700,cursor:"pointer"}}>👥 {t.name}</button>
+            );})}
+          </div>
+        )}
+
+        {/* Toevoegen */}
+        <div style={{display:"flex",gap:8,marginBottom:20}}>
+          <input placeholder="Item toevoegen..." value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&voegToe()} style={{flex:2,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:"11px 14px",color:"#fff",fontSize:14,outline:"none"}}/>
+          <input placeholder="Aantal" value={newQty} onChange={e=>setNewQty(e.target.value)} onKeyDown={e=>e.key==="Enter"&&voegToe()} style={{flex:1,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:"11px 14px",color:"#fff",fontSize:14,outline:"none"}}/>
+          <button onClick={voegToe} disabled={saving} style={{background:"linear-gradient(135deg,#4ECDC4,#2ecc71)",border:"none",borderRadius:12,padding:"11px 16px",color:"#fff",fontSize:18,fontWeight:900,cursor:"pointer",flexShrink:0}}>+</button>
+        </div>
+
+        {loading&&<div style={{display:"flex",justifyContent:"center",padding:30}}><div className="spinner"/></div>}
+
+        {!loading&&(
+          <div>
+            {/* Open items */}
+            {open.length>0&&(
+              <div style={{marginBottom:16}}>
+                {open.map(item=>(
+                  <div key={item.id} style={{display:"flex",alignItems:"center",gap:12,background:"rgba(255,255,255,0.04)",borderRadius:12,padding:"12px 14px",marginBottom:6}}>
+                    <button onClick={()=>toggleItem(item.id,item.checked)} style={{width:22,height:22,borderRadius:"50%",border:"2px solid rgba(255,255,255,0.3)",background:"transparent",cursor:"pointer",flexShrink:0}}/>
+                    <div style={{flex:1}}>
+                      <span style={{fontSize:14,fontWeight:600}}>{item.name}</span>
+                      {item.quantity&&<span style={{fontSize:12,opacity:0.5,marginLeft:8}}>{item.quantity}</span>}
+                    </div>
+                    <button onClick={()=>verwijderItem(item.id)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.2)",cursor:"pointer",fontSize:16,padding:"0 4px"}}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Afgevinkt */}
+            {gedaan.length>0&&(
+              <div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <p style={{fontSize:11,fontWeight:700,opacity:0.4,letterSpacing:1,textTransform:"uppercase"}}>Afgevinkt ({gedaan.length})</p>
+                  <button onClick={leegMaken} style={{background:"rgba(255,80,80,0.12)",border:"none",borderRadius:8,padding:"4px 10px",color:"#FF6B6B",fontSize:12,fontWeight:700,cursor:"pointer"}}>Verwijder afgevinkt</button>
+                </div>
+                {gedaan.map(item=>(
+                  <div key={item.id} style={{display:"flex",alignItems:"center",gap:12,background:"rgba(255,255,255,0.02)",borderRadius:12,padding:"10px 14px",marginBottom:6,opacity:0.5}}>
+                    <button onClick={()=>toggleItem(item.id,item.checked)} style={{width:22,height:22,borderRadius:"50%",border:"2px solid #4ECDC4",background:"#4ECDC4",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"#fff"}}>✓</button>
+                    <span style={{fontSize:14,textDecoration:"line-through",flex:1}}>{item.name}{item.quantity&&<span style={{opacity:0.6,marginLeft:8,fontSize:12}}>{item.quantity}</span>}</span>
+                    <button onClick={()=>verwijderItem(item.id)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.2)",cursor:"pointer",fontSize:16,padding:"0 4px"}}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {items.length===0&&(
+              <div style={{textAlign:"center",padding:"40px 20px",opacity:0.3}}>
+                <div style={{fontSize:40,marginBottom:12}}>🛒</div>
+                <div style={{fontSize:14,fontWeight:600}}>Lijst is leeg</div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ── Login ─────────────────────────────────────────────────────────────────────
@@ -119,19 +504,19 @@ function LoginScreen({onLogin}) {
   const [error,setError]=useState("");
   const [loadingUsers,setLoadingUsers]=useState(true);
   useEffect(()=>{loadUsers();},[]);
-  async function loadUsers() {
+  async function loadUsers(){
     setLoadingUsers(true);
     const {data}=await supabase.from("users").select("*").order("created_at");
     setUsers(data||[]); setLoadingUsers(false);
   }
-  async function registreer() {
+  async function registreer(){
     if(!username.trim()) return setError("Vul een gebruikersnaam in");
     setLoading(true); setError("");
     const {data:b}=await supabase.from("users").select("id").eq("username",username.trim()).single();
     if(b){setLoading(false);return setError("Deze naam is al bezet");}
     const isFirst=users.length===0;
-    const {data,error}=await supabase.from("users").insert([{username:username.trim(),color,is_admin:isFirst}]).select().single();
-    if(error){setLoading(false);return setError("Er ging iets mis");}
+    const {data,error:err}=await supabase.from("users").insert([{username:username.trim(),color,is_admin:isFirst}]).select().single();
+    if(err){setLoading(false);return setError("Er ging iets mis");}
     localStorage.setItem("woonplanner_user_id",data.id);
     onLogin(data); setLoading(false);
   }
@@ -189,16 +574,14 @@ function LoginScreen({onLogin}) {
   );
 }
 
-// ── Beheer scherm (teams + gebruikers) ───────────────────────────────────────
-function BeheerScherm({currentUser,onClose,showNotif}) {
-  const [tab,setTab]=useState("teams"); // "teams" | "gebruikers"
+// ── BeheerScherm ──────────────────────────────────────────────────────────────
+function BeheerScherm({currentUser,onClose,showNotif,initialTab}) {
+  const [tab,setTab]=useState(initialTab||"teams");
   const [teams,setTeams]=useState([]);
   const [allMembers,setAllMembers]=useState([]);
   const [allUsers,setAllUsers]=useState([]);
   const [loading,setLoading]=useState(true);
-
-  // teams state
-  const [teamsMode,setTeamsMode]=useState("overview"); // overview | nieuw | zoek | beheer
+  const [teamsMode,setTeamsMode]=useState("overview");
   const [newTeamName,setNewTeamName]=useState("");
   const [newTeamColor,setNewTeamColor]=useState(TEAM_COLORS[0]);
   const [zoekTerm,setZoekTerm]=useState("");
@@ -208,8 +591,7 @@ function BeheerScherm({currentUser,onClose,showNotif}) {
   const [selTeam,setSelTeam]=useState(null);
 
   useEffect(()=>{laadAlles();},[]);
-
-  async function laadAlles() {
+  async function laadAlles(){
     setLoading(true);
     const [r1,r2,r3]=await Promise.all([
       supabase.from("teams").select("*").order("name"),
@@ -219,17 +601,16 @@ function BeheerScherm({currentUser,onClose,showNotif}) {
     setTeams(r1.data||[]); setAllMembers(r2.data||[]); setAllUsers(r3.data||[]);
     setLoading(false);
   }
-
-  // ── Teams functies
   const myM=allMembers.filter(m=>m.user_id===currentUser.id);
-  const myApproved=teams.filter(t=>myM.some(m=>m.team_id===t.id&&m.status==="approved"));
-  const myPending=teams.filter(t=>myM.some(m=>m.team_id===t.id&&m.status==="pending"));
-  const pendingForMe=allMembers.filter(m=>m.status==="pending"&&myM.some(mm=>mm.team_id===m.team_id&&mm.role==="admin"));
   const userById=id=>allUsers.find(u=>u.id===id);
   const teamById=id=>teams.find(t=>t.id===id);
   const membersOf=tid=>allMembers.filter(m=>m.team_id===tid);
+  const allPendingRequests=allMembers.filter(m=>{
+    const isAdmin=myM.some(mm=>mm.team_id===m.team_id&&mm.role==="admin");
+    return m.status==="pending"&&isAdmin;
+  });
 
-  async function maakTeamAan() {
+  async function maakTeamAan(){
     if(!newTeamName.trim()) return setTeamsError("Vul een teamnaam in");
     if(!currentUser.can_create_teams&&!currentUser.is_admin) return setTeamsError("Je hebt geen recht om teams aan te maken");
     setSaving(true); setTeamsError("");
@@ -241,97 +622,78 @@ function BeheerScherm({currentUser,onClose,showNotif}) {
     setNewTeamName(""); setSaving(false); setTeamsMode("overview"); laadAlles();
     showNotif("✅ Team aangemaakt!",newTeamName);
   }
-  async function zoekTeams() {
+  async function zoekTeams(){
     if(!zoekTerm.trim()) return;
     const {data}=await supabase.from("teams").select("*").ilike("name",`%${zoekTerm.trim()}%`);
     setZoekRes(data||[]);
   }
-  async function vraagToegang(teamId) {
+  async function vraagToegang(teamId){
     setSaving(true);
     const b=allMembers.find(m=>m.team_id===teamId&&m.user_id===currentUser.id);
     if(!b) await supabase.from("team_members").insert([{team_id:teamId,user_id:currentUser.id,role:"member",status:"pending"}]);
     setSaving(false); laadAlles(); showNotif("📨 Verzoek verstuurd!","Wacht op goedkeuring");
   }
-  async function keurGoed(id) {await supabase.from("team_members").update({status:"approved"}).eq("id",id);laadAlles();}
-  async function weiger(id) {await supabase.from("team_members").delete().eq("id",id);laadAlles();}
-  async function verlaat(teamId) {await supabase.from("team_members").delete().eq("team_id",teamId).eq("user_id",currentUser.id);laadAlles();}
-  async function verwijderTeam(teamId) {
+  async function keurGoed(id){await supabase.from("team_members").update({status:"approved"}).eq("id",id);laadAlles();}
+  async function weiger(id){await supabase.from("team_members").delete().eq("id",id);laadAlles();}
+  async function verlaat(teamId){await supabase.from("team_members").delete().eq("team_id",teamId).eq("user_id",currentUser.id);laadAlles();}
+  async function verwijderTeam(teamId){
     if(!currentUser.can_delete_teams&&!currentUser.is_admin) return showNotif("❌ Geen recht","Je mag geen teams verwijderen");
     await supabase.from("teams").delete().eq("id",teamId);
     setSelTeam(null); setTeamsMode("overview"); laadAlles(); showNotif("🗑️ Team verwijderd","");
   }
-  async function voegLidToe(teamId,userId) {
+  async function voegLidToe(teamId,userId){
     const bestaand=allMembers.find(m=>m.team_id===teamId&&m.user_id===userId);
     if(bestaand) return;
     await supabase.from("team_members").insert([{team_id:teamId,user_id:userId,role:"member",status:"approved"}]);
     laadAlles(); showNotif("✅ Lid toegevoegd","");
   }
-
-  // ── Gebruikers functies
-  async function updateRecht(userId,key,value) {
+  async function updateRecht(userId,key,value){
     if(!currentUser.is_admin) return showNotif("❌ Geen recht","Alleen beheerders kunnen rechten aanpassen");
     const update={};update[key]=value;
     await supabase.from("users").update(update).eq("id",userId);
     setAllUsers(prev=>prev.map(u=>u.id===userId?{...u,[key]:value}:u));
   }
-  async function toggleAdmin(userId,value) {
-    if(!currentUser.is_admin) return showNotif("❌ Geen recht","Alleen beheerders kunnen admins aanpassen");
+  async function toggleAdmin(userId,value){
+    if(!currentUser.is_admin) return showNotif("❌ Geen recht","");
     await supabase.from("users").update({is_admin:value}).eq("id",userId);
     setAllUsers(prev=>prev.map(u=>u.id===userId?{...u,is_admin:value}:u));
   }
-  async function verwijderGebruiker(userId) {
-    if(!currentUser.is_admin) return showNotif("❌ Geen recht","Alleen beheerders kunnen gebruikers verwijderen");
+  async function verwijderGebruiker(userId){
+    if(!currentUser.is_admin) return showNotif("❌ Geen recht","");
     if(userId===currentUser.id) return showNotif("❌ Niet mogelijk","Je kunt jezelf niet verwijderen");
     await supabase.from("team_members").delete().eq("user_id",userId);
     await supabase.from("users").delete().eq("id",userId);
     setAllUsers(prev=>prev.filter(u=>u.id!==userId));
     showNotif("🗑️ Gebruiker verwijderd","");
   }
-
-  const headerBtnStyle=(active)=>({padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:active?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.05)",color:active?"#fff":"rgba(255,255,255,0.5)",transition:"all 0.15s"});
-  const sectionLabel={fontSize:11,fontWeight:700,opacity:0.5,letterSpacing:1,textTransform:"uppercase",marginBottom:10,display:"block"};
-
-  const allPendingRequests=allMembers.filter(m=>{
-    const isAdmin=myM.some(mm=>mm.team_id===m.team_id&&mm.role==="admin");
-    return m.status==="pending"&&isAdmin;
-  });
+  const hBtnStyle=(active)=>({padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:active?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.05)",color:active?"#fff":"rgba(255,255,255,0.5)",transition:"all 0.15s"});
+  const sLabel={fontSize:11,fontWeight:700,opacity:0.5,letterSpacing:1,textTransform:"uppercase",marginBottom:10,display:"block"};
 
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:600,backdropFilter:"blur(4px)"}}>
       <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(180deg,#1e1e3f,#16163a)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 24px 48px",width:"100%",maxWidth:560,maxHeight:"92vh",overflowY:"auto",fontFamily:"'DM Sans',sans-serif"}}>
-
-        {/* Header */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <h3 style={{fontSize:20,fontWeight:900,color:"#f0f0f0",fontFamily:"'Space Mono',monospace"}}>⚙️ Beheer</h3>
           <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:13}}>✕ Sluiten</button>
         </div>
-
-        {/* Tabs */}
         <div style={{display:"flex",gap:6,marginBottom:20,background:"rgba(255,255,255,0.04)",borderRadius:12,padding:4}}>
-          <button style={headerBtnStyle(tab==="teams")} onClick={()=>setTab("teams")}>
+          <button style={hBtnStyle(tab==="teams")} onClick={()=>setTab("teams")}>
             👥 Teams {allPendingRequests.length>0&&<span style={{background:"#FF6B6B",color:"#fff",borderRadius:20,padding:"1px 6px",fontSize:10,marginLeft:4}}>{allPendingRequests.length}</span>}
           </button>
-          {(currentUser.is_admin||currentUser.can_view_users)&&<button style={headerBtnStyle(tab==="gebruikers")} onClick={()=>setTab("gebruikers")}>👤 Gebruikers</button>}
+          {(currentUser.is_admin||currentUser.can_view_users)&&<button style={hBtnStyle(tab==="gebruikers")} onClick={()=>setTab("gebruikers")}>👤 Gebruikers</button>}
         </div>
-
         {loading&&<div style={{display:"flex",justifyContent:"center",padding:40}}><div className="spinner"/></div>}
-
-        {/* ── TEAMS TAB ── */}
         {!loading&&tab==="teams"&&(
           <div>
-            {/* Aanvragen */}
             {allPendingRequests.length>0&&(
               <div style={{marginBottom:20}}>
-                <span style={sectionLabel}>🔔 Toegangsverzoeken ({allPendingRequests.length})</span>
+                <span style={sLabel}>🔔 Toegangsverzoeken ({allPendingRequests.length})</span>
                 {allPendingRequests.map(m=>{
-                  const u=userById(m.user_id); const t=teamById(m.team_id);
+                  const u=userById(m.user_id);const t=teamById(m.team_id);
                   return (
                     <div key={m.id} style={{background:"rgba(255,211,61,0.08)",border:"1px solid rgba(255,211,61,0.2)",borderRadius:12,padding:"12px 16px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
                       <div style={{width:30,height:30,borderRadius:"50%",background:u?.color||"#888",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:13,flexShrink:0}}>{u?.username?.[0]?.toUpperCase()||"?"}</div>
-                      <div style={{flex:1}}>
-                        <div style={{fontWeight:700,fontSize:14}}>{u?.username||"?"}</div>
-                        <div style={{fontSize:12,opacity:0.5}}>wil lid worden van <b>{t?.name||"?"}</b></div>
-                      </div>
+                      <div style={{flex:1}}><div style={{fontWeight:700,fontSize:14}}>{u?.username||"?"}</div><div style={{fontSize:12,opacity:0.5}}>wil lid worden van <b>{t?.name||"?"}</b></div></div>
                       <button onClick={()=>keurGoed(m.id)} style={{background:"rgba(78,205,196,0.2)",border:"1px solid rgba(78,205,196,0.4)",borderRadius:8,padding:"5px 12px",color:"#4ECDC4",cursor:"pointer",fontSize:12,fontWeight:700}}>✓ Goedkeuren</button>
                       <button onClick={()=>weiger(m.id)} style={{background:"rgba(255,80,80,0.15)",border:"1px solid rgba(255,80,80,0.3)",borderRadius:8,padding:"5px 10px",color:"#FF6B6B",cursor:"pointer",fontSize:12,fontWeight:700}}>✕</button>
                     </div>
@@ -339,11 +701,9 @@ function BeheerScherm({currentUser,onClose,showNotif}) {
                 })}
               </div>
             )}
-
-            {/* Alle teams overzicht */}
             {teamsMode==="overview"&&(
               <div>
-                <span style={sectionLabel}>Alle teams ({teams.length})</span>
+                <span style={sLabel}>Alle teams ({teams.length})</span>
                 {teams.map(team=>{
                   const tc=team.color||"#7c7cff";
                   const approved=membersOf(team.id).filter(m=>m.status==="approved");
@@ -362,11 +722,8 @@ function BeheerScherm({currentUser,onClose,showNotif}) {
                             {isMember&&<span style={{color:"#4ECDC4"}}>✓ Jij bent lid</span>}
                             {isTeamAdmin&&<span style={{color:"#FFD93D"}}>👑 Jij bent beheerder</span>}
                           </div>
-                          {/* Leden avatars */}
                           <div style={{display:"flex",gap:4,marginTop:8,flexWrap:"wrap"}}>
-                            {approved.map(m=>{const u=userById(m.user_id);return u?(
-                              <div key={m.id} title={u.username+(m.role==="admin"?" (beheerder)":"")} style={{width:24,height:24,borderRadius:"50%",background:u.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,border:m.role==="admin"?"2px solid #FFD93D":"2px solid transparent"}}>{u.username[0].toUpperCase()}</div>
-                            ):null;})}
+                            {approved.map(m=>{const u=userById(m.user_id);return u?(<div key={m.id} title={u.username+(m.role==="admin"?" (beheerder)":"")} style={{width:24,height:24,borderRadius:"50%",background:u.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,border:m.role==="admin"?"2px solid #FFD93D":"2px solid transparent"}}>{u.username[0].toUpperCase()}</div>):null;})}
                           </div>
                         </div>
                         <div style={{display:"flex",gap:6,flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
@@ -380,20 +737,17 @@ function BeheerScherm({currentUser,onClose,showNotif}) {
                   );
                 })}
                 {teams.length===0&&<p style={{color:"rgba(255,255,255,0.3)",fontSize:14,textAlign:"center",padding:"20px 0"}}>Nog geen teams aangemaakt</p>}
-
                 <div style={{display:"flex",gap:8,marginTop:12}}>
                   {(currentUser.can_create_teams||currentUser.is_admin)&&<button onClick={()=>setTeamsMode("nieuw")} style={{flex:1,padding:"12px",background:"linear-gradient(135deg,#7c7cff,#5555cc)",color:"#fff",border:"none",borderRadius:12,fontSize:14,fontWeight:700,cursor:"pointer"}}>+ Nieuw team</button>}
                   <button onClick={()=>setTeamsMode("zoek")} style={{flex:1,padding:"12px",background:"rgba(255,255,255,0.08)",color:"#fff",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,fontSize:14,fontWeight:700,cursor:"pointer"}}>🔍 Zoeken</button>
                 </div>
               </div>
             )}
-
-            {/* Nieuw team */}
             {teamsMode==="nieuw"&&(
               <div>
                 <button onClick={()=>{setTeamsMode("overview");setTeamsError("");}} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:13,marginBottom:16}}>← Terug</button>
                 <input placeholder="Teamnaam..." value={newTeamName} onChange={e=>{setNewTeamName(e.target.value);setTeamsError("");}} onKeyDown={e=>e.key==="Enter"&&maakTeamAan()} autoFocus style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:12,padding:"14px 16px",color:"#fff",fontSize:16,marginBottom:16,outline:"none"}}/>
-                <span style={sectionLabel}>Teamkleur</span>
+                <span style={sLabel}>Teamkleur</span>
                 <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:16}}>
                   {TEAM_COLORS.map(c=><div key={c} onClick={()=>setNewTeamColor(c)} style={{width:32,height:32,borderRadius:8,background:c,cursor:"pointer",border:newTeamColor===c?"3px solid #fff":"3px solid transparent",transition:"all 0.15s"}}/>)}
                 </div>
@@ -401,8 +755,6 @@ function BeheerScherm({currentUser,onClose,showNotif}) {
                 <button onClick={maakTeamAan} disabled={saving} style={{width:"100%",padding:"14px",background:saving?"rgba(255,255,255,0.1)":`linear-gradient(135deg,${newTeamColor},${newTeamColor}99)`,color:"#fff",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:saving?"not-allowed":"pointer"}}>{saving?"Aanmaken...":"Team aanmaken →"}</button>
               </div>
             )}
-
-            {/* Zoek team */}
             {teamsMode==="zoek"&&(
               <div>
                 <button onClick={()=>setTeamsMode("overview")} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:13,marginBottom:16}}>← Terug</button>
@@ -426,58 +778,46 @@ function BeheerScherm({currentUser,onClose,showNotif}) {
                 {zoekRes.length===0&&zoekTerm&&<p style={{color:"rgba(255,255,255,0.3)",fontSize:14,textAlign:"center",padding:20}}>Geen teams gevonden</p>}
               </div>
             )}
-
-            {/* Team beheer */}
             {teamsMode==="beheer"&&selTeam&&(
               <div>
                 <button onClick={()=>{setSelTeam(null);setTeamsMode("overview");}} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:13,marginBottom:16}}>← Terug</button>
                 <div style={{background:(selTeam.color||"#7c7cff")+"11",border:`1px solid ${selTeam.color||"#7c7cff"}33`,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
                   <div style={{fontWeight:700,fontSize:16}}>{selTeam.name}</div>
                 </div>
-                <span style={sectionLabel}>Leden</span>
+                <span style={sLabel}>Leden</span>
                 {membersOf(selTeam.id).map(m=>{
                   const u=userById(m.user_id);
                   return (
                     <div key={m.id} style={{display:"flex",alignItems:"center",gap:12,background:"rgba(255,255,255,0.04)",borderRadius:10,padding:"10px 14px",marginBottom:6}}>
                       <div style={{width:28,height:28,borderRadius:"50%",background:u?.color||"#888",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,flexShrink:0}}>{u?.username?.[0]?.toUpperCase()||"?"}</div>
-                      <div style={{flex:1}}>
-                        <div style={{fontWeight:600,fontSize:14}}>{u?.username||"?"}</div>
-                        <div style={{fontSize:11,opacity:0.5}}>{m.role==="admin"?"👑 Beheerder":"Lid"} · {m.status==="pending"?"⏳ Wacht":"✓ Actief"}</div>
-                      </div>
+                      <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14}}>{u?.username||"?"}</div><div style={{fontSize:11,opacity:0.5}}>{m.role==="admin"?"👑 Beheerder":"Lid"} · {m.status==="pending"?"⏳ Wacht":"✓ Actief"}</div></div>
                       {m.status==="pending"&&(<><button onClick={()=>keurGoed(m.id)} style={{background:"rgba(78,205,196,0.2)",border:"none",borderRadius:8,padding:"5px 10px",color:"#4ECDC4",cursor:"pointer",fontSize:12,fontWeight:700}}>✓</button><button onClick={()=>weiger(m.id)} style={{background:"rgba(255,80,80,0.15)",border:"none",borderRadius:8,padding:"5px 10px",color:"#FF6B6B",cursor:"pointer",fontSize:12}}>✕</button></>)}
                       {m.status==="approved"&&m.user_id!==currentUser.id&&<button onClick={()=>weiger(m.id)} style={{background:"rgba(255,80,80,0.12)",border:"none",borderRadius:8,padding:"5px 10px",color:"#FF6B6B",cursor:"pointer",fontSize:12}}>Verwijder</button>}
                     </div>
                   );
                 })}
-
-                {/* Gebruiker toevoegen aan team */}
                 {(()=>{
                   const teamMemberIds=membersOf(selTeam.id).map(m=>m.user_id);
                   const nietLeden=allUsers.filter(u=>!teamMemberIds.includes(u.id));
-                  if(nietLeden.length===0) return null;
+                  if(!nietLeden.length) return null;
                   return (
                     <div style={{marginTop:16,borderTop:"1px solid rgba(255,255,255,0.08)",paddingTop:14}}>
-                      <span style={sectionLabel}>Lid toevoegen</span>
-                      <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                        {nietLeden.map(u=>(
-                          <div key={u.id} style={{display:"flex",alignItems:"center",gap:12,background:"rgba(255,255,255,0.03)",borderRadius:10,padding:"10px 14px"}}>
-                            <div style={{width:28,height:28,borderRadius:"50%",background:u.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,flexShrink:0}}>{u.username[0].toUpperCase()}</div>
-                            <span style={{flex:1,fontWeight:600,fontSize:14,opacity:0.8}}>{u.username}</span>
-                            <button onClick={()=>voegLidToe(selTeam.id,u.id)} style={{background:"rgba(78,205,196,0.15)",border:"1px solid rgba(78,205,196,0.3)",borderRadius:8,padding:"5px 12px",color:"#4ECDC4",cursor:"pointer",fontSize:12,fontWeight:700}}>+ Toevoegen</button>
-                          </div>
-                        ))}
-                      </div>
+                      <span style={sLabel}>Lid toevoegen</span>
+                      {nietLeden.map(u=>(
+                        <div key={u.id} style={{display:"flex",alignItems:"center",gap:12,background:"rgba(255,255,255,0.03)",borderRadius:10,padding:"10px 14px",marginBottom:6}}>
+                          <div style={{width:28,height:28,borderRadius:"50%",background:u.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,flexShrink:0}}>{u.username[0].toUpperCase()}</div>
+                          <span style={{flex:1,fontWeight:600,fontSize:14,opacity:0.8}}>{u.username}</span>
+                          <button onClick={()=>voegLidToe(selTeam.id,u.id)} style={{background:"rgba(78,205,196,0.15)",border:"1px solid rgba(78,205,196,0.3)",borderRadius:8,padding:"5px 12px",color:"#4ECDC4",cursor:"pointer",fontSize:12,fontWeight:700}}>+ Toevoegen</button>
+                        </div>
+                      ))}
                     </div>
                   );
                 })()}
-
                 {(currentUser.is_admin||currentUser.can_delete_teams)&&<button onClick={()=>verwijderTeam(selTeam.id)} style={{width:"100%",marginTop:16,padding:"12px",background:"rgba(255,80,80,0.12)",border:"1px solid rgba(255,80,80,0.25)",borderRadius:12,color:"#FF6B6B",cursor:"pointer",fontSize:14,fontWeight:700}}>Team verwijderen</button>}
               </div>
             )}
           </div>
         )}
-
-        {/* ── GEBRUIKERS TAB ── */}
         {!loading&&tab==="gebruikers"&&(
           <div>
             {!currentUser.is_admin&&<div style={{background:"rgba(255,211,61,0.1)",border:"1px solid rgba(255,211,61,0.25)",borderRadius:12,padding:"12px 16px",marginBottom:16,fontSize:13,color:"#FFD93D"}}>👁️ Je hebt leesrechten — alleen beheerders kunnen wijzigingen aanbrengen.</div>}
@@ -486,26 +826,20 @@ function BeheerScherm({currentUser,onClose,showNotif}) {
                 <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
                   <div style={{width:36,height:36,borderRadius:"50%",background:user.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,flexShrink:0}}>{user.username[0].toUpperCase()}</div>
                   <div style={{flex:1}}>
-                    <div style={{fontWeight:700,fontSize:15,display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{fontWeight:700,fontSize:15,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                       {user.username}
                       {user.is_admin&&<span style={{fontSize:11,background:"rgba(255,211,61,0.2)",color:"#FFD93D",borderRadius:6,padding:"2px 8px",fontWeight:700}}>👑 Admin</span>}
                       {user.id===currentUser.id&&<span style={{fontSize:11,background:"rgba(78,205,196,0.15)",color:"#4ECDC4",borderRadius:6,padding:"2px 8px"}}>Jij</span>}
                     </div>
                   </div>
-                  {currentUser.is_admin&&user.id!==currentUser.id&&(
-                    <button onClick={()=>verwijderGebruiker(user.id)} style={{background:"rgba(255,80,80,0.12)",border:"1px solid rgba(255,80,80,0.25)",borderRadius:8,padding:"5px 10px",color:"#FF6B6B",cursor:"pointer",fontSize:12,fontWeight:700}}>Verwijder</button>
-                  )}
+                  {currentUser.is_admin&&user.id!==currentUser.id&&<button onClick={()=>verwijderGebruiker(user.id)} style={{background:"rgba(255,80,80,0.12)",border:"1px solid rgba(255,80,80,0.25)",borderRadius:8,padding:"5px 10px",color:"#FF6B6B",cursor:"pointer",fontSize:12,fontWeight:700}}>Verwijder</button>}
                 </div>
-
-                {/* Admin toggle */}
                 {currentUser.is_admin&&user.id!==currentUser.id&&(
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.06)",marginBottom:8}}>
                     <span style={{fontSize:13,fontWeight:700,color:"#FFD93D"}}>👑 Globale beheerder</span>
                     <Toggle value={!!user.is_admin} onChange={v=>toggleAdmin(user.id,v)}/>
                   </div>
                 )}
-
-                {/* Rechten */}
                 {currentUser.is_admin&&!user.is_admin&&(
                   <div style={{display:"flex",flexDirection:"column",gap:8}}>
                     {RECHTEN.map(r=>(
@@ -516,9 +850,7 @@ function BeheerScherm({currentUser,onClose,showNotif}) {
                     ))}
                   </div>
                 )}
-                {currentUser.is_admin&&user.is_admin&&user.id!==currentUser.id&&(
-                  <p style={{fontSize:12,opacity:0.4,fontStyle:"italic"}}>Admins hebben alle rechten automatisch</p>
-                )}
+                {currentUser.is_admin&&user.is_admin&&user.id!==currentUser.id&&<p style={{fontSize:12,opacity:0.4,fontStyle:"italic"}}>Admins hebben alle rechten automatisch</p>}
                 {!currentUser.is_admin&&(
                   <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                     {RECHTEN.map(r=>(
@@ -538,42 +870,48 @@ function BeheerScherm({currentUser,onClose,showNotif}) {
 // ── TaskCard ──────────────────────────────────────────────────────────────────
 function TaskCard({task,onToggle,onDelete,onEdit,showDay,categories,allUsers,allTeams,currentUser}) {
   const [confirmDelete,setConfirmDelete]=useState(false);
+  const [showNotes,setShowNotes]=useState(false);
   const taskUsers=(task.userIds===null?[{id:null,color:"#888",username:"Iedereen"}]:(task.userIds||[]).map(id=>allUsers.find(u=>u.id==id)).filter(Boolean));
   const taskTeams=(task.teamIds||[]).map(id=>allTeams.find(t=>t.id==id)).filter(Boolean);
-
-  // Kleur: als er gebruikers zijn → gebruikerskleur, anders teamkleur
   const hasRealUser=task.userIds!==null&&(task.userIds||[]).length>0;
   const pc=hasRealUser?(taskUsers[0]?.color||"#888"):(taskTeams[0]?.color||"#888");
-
   const cat=categories.find(c=>c.id===task.category)||{icon:"🏷️"};
   const wd=getWeekDates(0);
   const canEdit=currentUser.is_admin||(task.userIds?.includes(currentUser.id)?currentUser.can_edit_own_tasks!==false:currentUser.can_edit_others_tasks!==false);
   const canDelete=currentUser.is_admin||(task.userIds?.includes(currentUser.id)?currentUser.can_delete_own_tasks!==false:currentUser.can_delete_others_tasks!==false);
-
   return (
-    <div className="task-card" style={{background:`linear-gradient(135deg,${pc}11,${pc}06)`,border:confirmDelete?"1px solid rgba(255,80,80,0.4)":`1px solid ${pc}33`,borderLeft:`4px solid ${confirmDelete?"#FF6B6B":pc}`,borderRadius:14,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,opacity:task.done?0.55:1}}>
-      <button onClick={()=>onToggle(task.id,task.done)} style={{width:26,height:26,borderRadius:"50%",flexShrink:0,background:task.done?pc:"transparent",border:`2px solid ${pc}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#fff"}}>{task.done?"✓":""}</button>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{fontWeight:700,fontSize:14,color:"#f0f0f0",textDecoration:task.done?"line-through":"none"}}>{cat.icon} {task.title}</div>
-        {confirmDelete?(
-          <div style={{display:"flex",gap:6,marginTop:6}}>
-            <button onClick={()=>onDelete(task.id)} style={{background:"rgba(255,80,80,0.25)",border:"1px solid rgba(255,80,80,0.4)",borderRadius:8,padding:"4px 12px",color:"#FF6B6B",fontSize:12,fontWeight:700,cursor:"pointer"}}>Ja, verwijder</button>
-            <button onClick={()=>setConfirmDelete(false)} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"4px 12px",color:"rgba(255,255,255,0.5)",fontSize:12,fontWeight:700,cursor:"pointer"}}>Annuleer</button>
+    <div className="task-card" style={{background:`linear-gradient(135deg,${pc}11,${pc}06)`,border:confirmDelete?"1px solid rgba(255,80,80,0.4)":`1px solid ${pc}33`,borderLeft:`4px solid ${confirmDelete?"#FF6B6B":pc}`,borderRadius:14,padding:"14px 16px",opacity:task.done?0.55:1}}>
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        <button onClick={()=>onToggle(task.id,task.done)} style={{width:26,height:26,borderRadius:"50%",flexShrink:0,background:task.done?pc:"transparent",border:`2px solid ${pc}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#fff"}}>{task.done?"✓":""}</button>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+            <span style={{fontWeight:700,fontSize:14,color:"#f0f0f0",textDecoration:task.done?"line-through":"none"}}>{cat.icon} {task.title}</span>
+            {task.isRecurring&&<span style={{fontSize:12,opacity:0.5}} title="Terugkerende taak">🔁</span>}
+            {task.notes&&<button onClick={()=>setShowNotes(s=>!s)} style={{fontSize:11,background:"rgba(255,255,255,0.08)",border:"none",borderRadius:6,padding:"1px 7px",color:"rgba(255,255,255,0.5)",cursor:"pointer"}}>{showNotes?"▲":"📝"}</button>}
           </div>
-        ):(
-          <div style={{display:"flex",gap:5,marginTop:4,flexWrap:"wrap",alignItems:"center"}}>
-            {taskUsers.map(u=><span key={u.id ?? "all"} style={{fontSize:11,background:u.color+"22",color:u.color,borderRadius:6,padding:"2px 7px",fontWeight:700}}>{u.username[0]?.toUpperCase()} {u.username}</span>)}
-            {taskTeams.map(t=>{const tc=t.color||"#7c7cff";return <span key={t.id} style={{fontSize:11,background:tc+"22",color:tc,borderRadius:6,padding:"2px 7px",fontWeight:700}}>👥 {t.name}</span>;})}
-            {showDay&&<span style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>{DAYS[task.dayIndex]} {formatDate(wd[task.dayIndex])}</span>}
-            {task.deadline&&<span style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>{task.deadline==="hele_dag"?"🌅 Hele dag":`🕐 ${task.deadline}`}</span>}
+          {confirmDelete?(
+            <div style={{display:"flex",gap:6,marginTop:6}}>
+              <button onClick={()=>onDelete(task.id)} style={{background:"rgba(255,80,80,0.25)",border:"1px solid rgba(255,80,80,0.4)",borderRadius:8,padding:"4px 12px",color:"#FF6B6B",fontSize:12,fontWeight:700,cursor:"pointer"}}>Ja, verwijder</button>
+              <button onClick={()=>setConfirmDelete(false)} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"4px 12px",color:"rgba(255,255,255,0.5)",fontSize:12,fontWeight:700,cursor:"pointer"}}>Annuleer</button>
+            </div>
+          ):(
+            <div style={{display:"flex",gap:5,marginTop:4,flexWrap:"wrap",alignItems:"center"}}>
+              {taskUsers.map(u=><span key={u.id ?? "all"} style={{fontSize:11,background:u.color+"22",color:u.color,borderRadius:6,padding:"2px 7px",fontWeight:700}}>{u.username[0]?.toUpperCase()} {u.username}</span>)}
+              {taskTeams.map(t=>{const tc=t.color||"#7c7cff";return <span key={t.id} style={{fontSize:11,background:tc+"22",color:tc,borderRadius:6,padding:"2px 7px",fontWeight:700}}>👥 {t.name}</span>;})}
+              {showDay&&<span style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>{DAYS[task.dayIndex]} {formatDate(wd[task.dayIndex])}</span>}
+              {task.deadline&&<span style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>{task.deadline==="hele_dag"?"🌅 Hele dag":`🕐 ${task.deadline}`}</span>}
+            </div>
+          )}
+        </div>
+        {!confirmDelete&&(
+          <div style={{display:"flex",gap:6,flexShrink:0}}>
+            {canEdit&&<button onClick={()=>onEdit(task)} style={{background:"rgba(255,255,255,0.05)",border:"none",borderRadius:8,padding:"6px 8px",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:13}}>✏️</button>}
+            {canDelete&&<button onClick={()=>setConfirmDelete(true)} style={{background:"rgba(255,255,255,0.05)",border:"none",borderRadius:8,padding:"6px 8px",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:14}}>✕</button>}
           </div>
         )}
       </div>
-      {!confirmDelete&&(
-        <div style={{display:"flex",gap:6,flexShrink:0}}>
-          {canEdit&&<button onClick={()=>onEdit(task)} style={{background:"rgba(255,255,255,0.05)",border:"none",borderRadius:8,padding:"6px 8px",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:13}}>✏️</button>}
-          {canDelete&&<button onClick={()=>setConfirmDelete(true)} style={{background:"rgba(255,255,255,0.05)",border:"none",borderRadius:8,padding:"6px 8px",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:14}}>✕</button>}
-        </div>
+      {showNotes&&task.notes&&(
+        <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid rgba(255,255,255,0.07)",fontSize:13,color:"rgba(255,255,255,0.6)",lineHeight:1.5,whiteSpace:"pre-wrap"}}>{task.notes}</div>
       )}
     </div>
   );
@@ -591,7 +929,11 @@ function App() {
   const [view,setView]=useState("week");
   const [selectedDay,setSelectedDay]=useState(()=>{const d=new Date().getDay();return d===0?6:d-1;});
   const [showModal,setShowModal]=useState(false);
+  const [showMenu,setShowMenu]=useState(false);
   const [showBeheer,setShowBeheer]=useState(false);
+  const [beheerTab,setBeheerTab]=useState("teams");
+  const [showStats,setShowStats]=useState(false);
+  const [showBoodschappen,setShowBoodschappen]=useState(false);
   const [notification,setNotification]=useState(null);
   const [filterUser,setFilterUser]=useState("all");
   const [filterTeam,setFilterTeam]=useState("all");
@@ -602,16 +944,17 @@ function App() {
   const [showLabelManager,setShowLabelManager]=useState(false);
   const [newLabel,setNewLabel]=useState({label:"",icon:"🏷️"});
   const [editingTask,setEditingTask]=useState(null);
-  const [form,setForm]=useState({title:"",userIds:[],teamIds:[],category:DEFAULT_CATEGORIES[0].id,dayIndex:0,deadline:"hele_dag"});
+  const [form,setForm]=useState({title:"",userIds:[],teamIds:[],category:DEFAULT_CATEGORIES[0].id,dayIndex:0,deadline:"hele_dag",notes:"",recurrenceType:"none",recurrenceDay:null});
   const [weekOffset,setWeekOffset]=useState(0);
   const [holidays,setHolidays]=useState({});
+  const [pendingCount,setPendingCount]=useState(0);
 
   const weekDates=getWeekDates(weekOffset);
   const todayIndex=weekOffset===0?(()=>{const d=new Date().getDay();return d===0?6:d-1;})():-1;
   const currentMonday=weekDates[0].toISOString().split("T")[0];
 
   useEffect(()=>{
-    async function herstel() {
+    async function herstel(){
       const sid=localStorage.getItem("woonplanner_user_id");
       if(sid){const {data}=await supabase.from("users").select("*").eq("id",parseInt(sid)).single();if(data)setCurrentUser(data);}
       setLoading(false);
@@ -621,7 +964,7 @@ function App() {
 
   const loadAll=useCallback(async()=>{
     if(!currentUser) return;
-    try {
+    try{
       const [r1,r2,r3,r4,r5]=await Promise.all([
         supabase.from("users").select("*").order("created_at"),
         supabase.from("teams").select("*").order("name"),
@@ -633,44 +976,54 @@ function App() {
       setAllTeams(r2.data||[]);
       const myIds=(r3.data||[]).map(m=>m.team_id);
       setMyTeamIds(myIds);
-      // Herlaad huidige gebruiker voor rechten
       const me=(r1.data||[]).find(u=>u.id===currentUser.id);
       if(me) setCurrentUser(me);
       const map={};
       (r5.data||[]).forEach(tt=>{if(!map[tt.task_id])map[tt.task_id]=[];map[tt.task_id].push(tt.team_id);});
-      const visible=(r4.data||[]).filter(t=>{
+      const allNorm=(r4.data||[]).filter(t=>{
         const tTeams=map[t.id]||[];
         if(tTeams.length>0) return tTeams.some(tid=>myIds.includes(tid));
         return true;
+      }).map(t=>normalizeTask(t,map[t.id]||[]));
+
+      // Genereer virtuele instanties van terugkerende taken voor de huidige week
+      const recurring=allNorm.filter(t=>t.recurrenceType&&t.recurrenceType!=="none");
+      const virtual=[];
+      recurring.forEach(t=>{
+        if(recurringTaskBelongsToWeek(t,currentMonday)){
+          // Bepaal de juiste dayIndex voor deze week
+          let di=t.dayIndex;
+          if(t.recurrenceType==="monthly"||t.recurrenceType==="monthly_last"){
+            // Zoek welke dag in de week past
+            for(let i=0;i<7;i++){
+              const d=new Date(weekDates[0]); d.setDate(weekDates[0].getDate()+i);
+              if(t.recurrenceType==="monthly"&&d.getDate()===t.recurrenceDay){di=i;break;}
+              if(t.recurrenceType==="monthly_last"){
+                const dayOfWeek=(d.getDay()+6)%7;
+                if(dayOfWeek===t.dayIndex){const nw=new Date(d);nw.setDate(d.getDate()+7);if(nw.getMonth()!==d.getMonth()){di=i;break;}}
+              }
+            }
+          }
+          virtual.push({...t,id:`rec_${t.id}_${currentMonday}`,weekMonday:currentMonday,dayIndex:di,done:false,isVirtual:true,originalId:t.id});
+        }
       });
-      setTasks(visible.map(t=>normalizeTask(t,map[t.id]||[])));
+      setTasks([...allNorm,...virtual]);
       setAppError(null);
-    } catch(e){setAppError("Verbinding mislukt");}
-  },[currentUser?.id]);
+    }catch(e){setAppError("Verbinding mislukt");}
+  },[currentUser?.id,currentMonday]);
 
   useEffect(()=>{loadAll();},[loadAll]);
-  useEffect(()=>{
-    if(!currentUser) return;
-    const iv=setInterval(loadAll,30000);
-    return ()=>clearInterval(iv);
-  },[currentUser,loadAll]);
+  useEffect(()=>{if(!currentUser)return;const iv=setInterval(loadAll,30000);return()=>clearInterval(iv);},[currentUser,loadAll]);
   useEffect(()=>{try{localStorage.setItem("woonplanner_categories",JSON.stringify(categories));}catch(e){};},[categories]);
 
   useEffect(()=>{
-    async function laadHolidays() {
-      const jaar=new Date().getFullYear();
-      const res={};
+    async function laadHolidays(){
+      const jaar=new Date().getFullYear();const res={};
       for(const j of[jaar,jaar+1]){
         try{
           const cached=localStorage.getItem(`holidays_NL_${j}`);
           if(cached) Object.assign(res,JSON.parse(cached));
-          else{
-            const r=await fetch(`https://date.nager.at/api/v3/PublicHolidays/${j}/NL`);
-            const data=await r.json();
-            const jd={};data.forEach(h=>{jd[h.date]=h.localName;});
-            localStorage.setItem(`holidays_NL_${j}`,JSON.stringify(jd));
-            Object.assign(res,jd);
-          }
+          else{const r=await fetch(`https://date.nager.at/api/v3/PublicHolidays/${j}/NL`);const data=await r.json();const jd={};data.forEach(h=>{jd[h.date]=h.localName;});localStorage.setItem(`holidays_NL_${j}`,JSON.stringify(jd));Object.assign(res,jd);}
         }catch(e){}
       }
       setHolidays(res);
@@ -678,26 +1031,22 @@ function App() {
     laadHolidays();
   },[]);
 
-  function holidayFor(date){return holidays[date.toISOString().split("T")[0]]||null;}
-  async function refresh(){setRefreshing(true);await loadAll();setTimeout(()=>setRefreshing(false),500);}
-
-  const myApprovedTeams=allTeams.filter(t=>myTeamIds.includes(t.id));
-
-  // Tel openstaande verzoeken voor beheer-badge
-  const [pendingCount,setPendingCount]=useState(0);
   useEffect(()=>{
     async function checkPending(){
       if(!currentUser) return;
       const {data}=await supabase.from("team_members").select("*");
       const members=data||[];
       const myAdminTeams=members.filter(m=>m.user_id===currentUser.id&&m.role==="admin"&&m.status==="approved").map(m=>m.team_id);
-      const cnt=members.filter(m=>m.status==="pending"&&myAdminTeams.includes(m.team_id)).length;
-      setPendingCount(cnt);
+      setPendingCount(members.filter(m=>m.status==="pending"&&myAdminTeams.includes(m.team_id)).length);
     }
     checkPending();
     const iv=setInterval(checkPending,30000);
-    return ()=>clearInterval(iv);
+    return()=>clearInterval(iv);
   },[currentUser]);
+
+  function holidayFor(date){return holidays[date.toISOString().split("T")[0]]||null;}
+  async function refresh(){setRefreshing(true);await loadAll();setTimeout(()=>setRefreshing(false),500);}
+  const myApprovedTeams=allTeams.filter(t=>myTeamIds.includes(t.id));
 
   const filtered=useMemo(()=>tasks.filter(t=>{
     const matchWeek=t.weekMonday===currentMonday;
@@ -709,41 +1058,60 @@ function App() {
 
   function showNotif(title,body){setNotification({title,body});setTimeout(()=>setNotification(null),3000);}
 
-  async function saveTask() {
+  async function saveTask(){
     if(!form.title.trim()) return;
     if(!currentUser.can_create_tasks&&!currentUser.is_admin&&!editingTask) return showNotif("❌ Geen recht","Je mag geen taken aanmaken");
     setSaving(true);
     const user_id=form.userIds.length===0?null:form.userIds.join(",");
+    const recDay=form.recurrenceType==="monthly"
+      ? weekDates[form.dayIndex].getDate()
+      : form.recurrenceType==="monthly_last"||form.recurrenceType==="weekly"||form.recurrenceType==="biweekly"
+        ? form.dayIndex : null;
     try{
-      if(editingTask){
-        const {error}=await supabase.from("tasks").update({title:form.title,user_id,category:form.category,day_index:form.dayIndex,deadline:form.deadline||""}).eq("id",editingTask.id);
-        if(error) throw error;
+      if(editingTask&&!editingTask.isVirtual){
+        await supabase.from("tasks").update({title:form.title,user_id,category:form.category,day_index:form.dayIndex,deadline:form.deadline||"",notes:form.notes||"",recurrence_type:form.recurrenceType==="none"?null:form.recurrenceType,recurrence_day:form.recurrenceType==="none"?null:recDay}).eq("id",editingTask.id);
         await supabase.from("task_teams").delete().eq("task_id",editingTask.id);
         if(form.teamIds.length>0) await supabase.from("task_teams").insert(form.teamIds.map(tid=>({task_id:editingTask.id,team_id:tid})));
         showNotif("✏️ Bijgewerkt!",form.title);
       } else {
-        const {data,error}=await supabase.from("tasks").insert([{title:form.title,user_id,category:form.category,day_index:form.dayIndex,done:false,deadline:form.deadline||"",week_monday:currentMonday}]).select().single();
-        if(error) throw error;
-        if(form.teamIds.length>0) await supabase.from("task_teams").insert(form.teamIds.map(tid=>({task_id:data.id,team_id:tid})));
-        showNotif("🎉 Toegevoegd!",form.title);
+        const targetId=editingTask?.isVirtual?editingTask.originalId:null;
+        if(targetId){
+          // Virtuele instantie bewerken = origineel bijwerken
+          await supabase.from("tasks").update({title:form.title,user_id,category:form.category,deadline:form.deadline||"",notes:form.notes||""}).eq("id",targetId);
+          showNotif("✏️ Bijgewerkt!",form.title);
+        } else {
+          const {data,error}=await supabase.from("tasks").insert([{title:form.title,user_id,category:form.category,day_index:form.dayIndex,done:false,deadline:form.deadline||"",week_monday:currentMonday,notes:form.notes||"",recurrence_type:form.recurrenceType==="none"?null:form.recurrenceType,recurrence_day:form.recurrenceType==="none"?null:recDay}]).select().single();
+          if(error) throw error;
+          if(form.teamIds.length>0) await supabase.from("task_teams").insert(form.teamIds.map(tid=>({task_id:data.id,team_id:tid})));
+          showNotif("🎉 Toegevoegd!",form.title);
+        }
       }
       setShowModal(false); setEditingTask(null);
-      setForm(f=>({...f,title:"",userIds:[],teamIds:[],dayIndex:selectedDay,deadline:"hele_dag"}));
+      setForm(f=>({...f,title:"",userIds:[],teamIds:[],dayIndex:selectedDay,deadline:"hele_dag",notes:"",recurrenceType:"none"}));
       await loadAll();
     }catch(e){showNotif("❌ Mislukt","Kon taak niet opslaan");}
     finally{setSaving(false);}
   }
 
   async function toggleDone(id,cur){
+    if(String(id).startsWith("rec_")){
+      // Virtuele terugkerende taak: sla een echte instantie op voor deze week
+      const vTask=tasks.find(t=>t.id===id);
+      if(!vTask) return;
+      const user_id=vTask.userIds===null?null:vTask.userIds.join(",");
+      const {data,error}=await supabase.from("tasks").insert([{title:vTask.title,user_id,category:vTask.category,day_index:vTask.dayIndex,done:true,deadline:vTask.deadline||"",week_monday:currentMonday,notes:vTask.notes||""}]).select().single();
+      if(!error){await loadAll();showNotif("✅ Afgevinkt!","");}
+      return;
+    }
     setTasks(prev=>prev.map(t=>t.id===id?{...t,done:!cur}:t));
     try{
-      const {error}=await supabase.from("tasks").update({done:!cur}).eq("id",id);
-      if(error) throw error;
+      await supabase.from("tasks").update({done:!cur}).eq("id",id);
       if(!cur) showNotif("✅ Afgevinkt!","");
     }catch(e){setTasks(prev=>prev.map(t=>t.id===id?{...t,done:cur}:t));}
   }
 
   async function deleteTask(id){
+    if(String(id).startsWith("rec_")) return showNotif("ℹ️ Tip","Bewerk de originele taak om herhaling te stoppen");
     setTasks(prev=>prev.filter(t=>t.id!==id));
     try{
       await supabase.from("task_teams").delete().eq("task_id",id);
@@ -754,12 +1122,12 @@ function App() {
   function openModal(dayIndex){
     if(!currentUser.can_create_tasks&&!currentUser.is_admin) return showNotif("❌ Geen recht","Je mag geen taken aanmaken");
     setEditingTask(null);
-    setForm({title:"",userIds:[],teamIds:[],category:categories[0]?.id||"household",dayIndex,deadline:"hele_dag"});
+    setForm({title:"",userIds:[],teamIds:[],category:categories[0]?.id||"household",dayIndex,deadline:"hele_dag",notes:"",recurrenceType:"none",recurrenceDay:null});
     setShowModal(true);
   }
   function openEditModal(task){
     setEditingTask(task);
-    setForm({title:task.title,userIds:task.userIds||[],teamIds:task.teamIds||[],category:task.category,dayIndex:task.dayIndex,deadline:task.deadline||"hele_dag"});
+    setForm({title:task.title,userIds:task.userIds||[],teamIds:task.teamIds||[],category:task.category,dayIndex:task.dayIndex,deadline:task.deadline||"hele_dag",notes:task.notes||"",recurrenceType:task.recurrenceType||"none",recurrenceDay:task.recurrenceDay});
     setShowModal(true);
   }
   function addLabel(){if(!newLabel.label.trim())return;setCategories(prev=>[...prev,{id:"custom_"+Date.now(),label:newLabel.label.trim(),icon:newLabel.icon}]);setNewLabel({label:"",icon:"🏷️"});}
@@ -786,40 +1154,49 @@ function App() {
         </div>
       )}
 
-      {showBeheer&&<BeheerScherm currentUser={currentUser} onClose={()=>{setShowBeheer(false);loadAll();}} showNotif={showNotif}/>}
+      {showMenu&&<HamburgerMenu currentUser={currentUser} pendingCount={pendingCount}
+        onOpenBeheer={(tab)=>{setBeheerTab(tab);setShowBeheer(true);}}
+        onOpenLabels={()=>setShowLabelManager(true)}
+        onOpenStats={()=>setShowStats(true)}
+        onOpenBoodschappen={()=>setShowBoodschappen(true)}
+        onWissel={()=>{localStorage.removeItem("woonplanner_user_id");setCurrentUser(null);}}
+        onClose={()=>setShowMenu(false)}
+      />}
+
+      {showBeheer&&<BeheerScherm currentUser={currentUser} initialTab={beheerTab} onClose={()=>{setShowBeheer(false);loadAll();}} showNotif={showNotif}/>}
+      {showStats&&<StatistiekenScherm onClose={()=>setShowStats(false)} allUsers={allUsers} allTeams={allTeams} myTeamIds={myTeamIds}/>}
+      {showBoodschappen&&<BoodschappenScherm onClose={()=>setShowBoodschappen(false)} currentUser={currentUser} myTeamIds={myTeamIds} allTeams={allTeams} showNotif={showNotif}/>}
 
       {/* ── HEADER ── */}
       <div style={{paddingTop:"calc(14px + env(safe-area-inset-top))",paddingBottom:10,paddingLeft:16,paddingRight:16,background:"rgba(26,26,46,0.97)",borderBottom:"1px solid rgba(255,255,255,0.06)",backdropFilter:"blur(10px)",position:"sticky",top:0,zIndex:100}}>
         <div style={{maxWidth:900,margin:"0 auto"}}>
 
-          {/* Rij 1: titel + filters + gebruiker */}
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap",gap:6}}>
-            <h1 style={{fontSize:19,fontWeight:900,letterSpacing:-1,fontFamily:"'Space Mono',monospace",flexShrink:0}}>🏠 WoonPlanner</h1>
-            <div style={{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
+          {/* Rij 1 */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+              {/* Hamburger */}
+              <button onClick={()=>setShowMenu(true)} style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"#fff",fontSize:18,position:"relative",flexShrink:0}}>
+                ☰
+                {pendingCount>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#FF6B6B",color:"#fff",borderRadius:"50%",width:14,height:14,fontSize:9,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900}}>{pendingCount}</span>}
+              </button>
+              <h1 style={{fontSize:18,fontWeight:900,letterSpacing:-1,fontFamily:"'Space Mono',monospace"}}>🏠 WoonPlanner</h1>
+            </div>
+            {/* Gebruikersfilters */}
+            <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
               {[{id:"all",username:"Allen",color:"#888"},...allUsers].map(u=>{
                 const active=String(filterUser)===String(u.id);
                 return <button key={u.id} onClick={()=>setFilterUser(String(u.id))} style={{background:active?u.color:"rgba(255,255,255,0.06)",color:"#fff",border:"none",borderRadius:20,padding:"3px 9px",fontSize:11,fontWeight:700,cursor:"pointer",opacity:active?1:0.5}}>{u.username}</button>;
               })}
               <div style={{width:1,height:16,background:"rgba(255,255,255,0.1)",flexShrink:0}}/>
               <div style={{width:26,height:26,borderRadius:"50%",background:currentUser.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,flexShrink:0}}>{currentUser.username[0].toUpperCase()}</div>
-              <span style={{fontSize:12,fontWeight:700,opacity:0.8}}>{currentUser.username}</span>
               {currentUser.is_admin&&<span style={{fontSize:10,color:"#FFD93D"}}>👑</span>}
-              <button onClick={()=>setShowBeheer(true)} style={{background:"rgba(124,124,255,0.15)",border:"1px solid rgba(124,124,255,0.3)",borderRadius:8,padding:"3px 9px",color:"#7c7cff",fontSize:11,cursor:"pointer",fontWeight:700,position:"relative"}}>
-                ⚙️ Beheer
-                {pendingCount>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#FF6B6B",color:"#fff",borderRadius:"50%",width:14,height:14,fontSize:9,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900}}>{pendingCount}</span>}
-              </button>
-              <button onClick={()=>{localStorage.removeItem("woonplanner_user_id");setCurrentUser(null);}} style={{background:"rgba(255,255,255,0.06)",border:"none",borderRadius:8,padding:"3px 7px",color:"rgba(255,255,255,0.4)",fontSize:11,cursor:"pointer"}}>Wissel</button>
             </div>
           </div>
 
-          {/* Rij 2: team filter */}
+          {/* Rij 2: teamfilter */}
           <div style={{display:"flex",gap:5,marginBottom:8,overflowX:"auto",paddingBottom:2}}>
             <button onClick={()=>setFilterTeam("all")} style={{background:filterTeam==="all"?"rgba(255,255,255,0.14)":"rgba(255,255,255,0.04)",border:filterTeam==="all"?"1px solid rgba(255,255,255,0.22)":"1px solid transparent",borderRadius:20,padding:"3px 11px",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>Alle teams</button>
-            {myApprovedTeams.map(t=>{
-              const tc=t.color||"#7c7cff";
-              const active=String(filterTeam)===String(t.id);
-              return <button key={t.id} onClick={()=>setFilterTeam(String(t.id))} style={{background:active?tc+"33":"rgba(255,255,255,0.04)",border:active?`1px solid ${tc}66`:"1px solid transparent",borderRadius:20,padding:"3px 11px",color:active?tc:"rgba(255,255,255,0.45)",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>👥 {t.name}</button>;
-            })}
+            {myApprovedTeams.map(t=>{const tc=t.color||"#7c7cff";const active=String(filterTeam)===String(t.id);return <button key={t.id} onClick={()=>setFilterTeam(String(t.id))} style={{background:active?tc+"33":"rgba(255,255,255,0.04)",border:active?`1px solid ${tc}66`:"1px solid transparent",borderRadius:20,padding:"3px 11px",color:active?tc:"rgba(255,255,255,0.45)",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>👥 {t.name}</button>;})}
           </div>
 
           {/* Rij 3: views + weeknav */}
@@ -867,7 +1244,7 @@ function App() {
                         const ft=t.teamIds?.length?allTeams.find(tm=>tm.id==t.teamIds[0]):null;
                         const clr=hasRealUser?fu.color:(ft?.color||"#888");
                         const ct=categories.find(c=>c.id===t.category)||{icon:"🏷️"};
-                        return <div key={t.id} style={{background:clr+"22",borderLeft:`3px solid ${clr}`,borderRadius:"0 6px 6px 0",padding:"3px 6px",fontSize:11,fontWeight:600,opacity:t.done?0.4:1,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",color:"#f0f0f0"}}>{ct.icon} {t.title}</div>;
+                        return <div key={t.id} style={{background:clr+"22",borderLeft:`3px solid ${clr}`,borderRadius:"0 6px 6px 0",padding:"3px 6px",fontSize:11,fontWeight:600,opacity:t.done?0.4:1,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",color:"#f0f0f0"}}>{ct.icon} {t.title}{t.isRecurring?" 🔁":""}</div>;
                       })}
                       {tasksByDay(i).length>5&&<div style={{fontSize:10,opacity:0.4}}>+{tasksByDay(i).length-5} meer</div>}
                       {tasksByDay(i).length===0&&!hol&&<div style={{fontSize:11,opacity:0.25,fontStyle:"italic"}}>Vrij</div>}
@@ -919,9 +1296,9 @@ function App() {
         {/* STATS */}
         <div style={{marginTop:24,display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
           {[
-            {key:"all",label:"Totaal",value:tasks.filter(t=>t.weekMonday===currentMonday).length,icon:"📋",color:"#7c7cff"},
-            {key:"done",label:"Gedaan",value:tasks.filter(t=>t.weekMonday===currentMonday&&t.done).length,icon:"✅",color:"#4ECDC4"},
-            {key:"open",label:"Open",value:tasks.filter(t=>t.weekMonday===currentMonday&&!t.done).length,icon:"⏳",color:"#FF6B6B"},
+            {key:"all",label:"Totaal",value:tasks.filter(t=>t.weekMonday===currentMonday&&!t.isVirtual).length,icon:"📋",color:"#7c7cff"},
+            {key:"done",label:"Gedaan",value:tasks.filter(t=>t.weekMonday===currentMonday&&t.done&&!t.isVirtual).length,icon:"✅",color:"#4ECDC4"},
+            {key:"open",label:"Open",value:tasks.filter(t=>t.weekMonday===currentMonday&&!t.done&&!t.isVirtual).length,icon:"⏳",color:"#FF6B6B"},
           ].map(s=>(
             <div key={s.key} onClick={()=>setFilterDone(s.key)} style={{background:filterDone===s.key?s.color+"22":"rgba(255,255,255,0.04)",borderRadius:14,padding:"14px 16px",textAlign:"center",cursor:"pointer",border:filterDone===s.key?`1px solid ${s.color}55`:"1px solid rgba(255,255,255,0.06)",transition:"all 0.2s"}}>
               <div style={{fontSize:22,marginBottom:4}}>{s.icon}</div>
@@ -934,7 +1311,6 @@ function App() {
 
       {/* FAB */}
       <button className="btn-pulse" onClick={()=>openModal(selectedDay)} style={{position:"fixed",bottom:"calc(28px + env(safe-area-inset-bottom))",right:24,background:`linear-gradient(135deg,${currentUser.color},${currentUser.color}bb)`,color:"#fff",border:"none",borderRadius:"50%",width:60,height:60,fontSize:28,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}}>+</button>
-      <button onClick={()=>setShowLabelManager(true)} style={{position:"fixed",bottom:"calc(28px + env(safe-area-inset-bottom))",left:24,background:"rgba(255,255,255,0.08)",color:"#fff",border:"1px solid rgba(255,255,255,0.15)",borderRadius:"50%",width:50,height:50,fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}}>🏷️</button>
 
       {/* TAAK MODAL */}
       {showModal&&(
@@ -948,10 +1324,7 @@ function App() {
               <label style={{fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:8}}>Voor wie</label>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                 <button onClick={()=>setForm(f=>({...f,userIds:[]}))} style={{background:form.userIds.length===0?"#888":"rgba(255,255,255,0.06)",color:"#fff",border:form.userIds.length===0?"1px solid #aaa":"1px solid transparent",borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:700,cursor:"pointer",opacity:form.userIds.length===0?1:0.5}}>👥 Iedereen</button>
-                {allUsers.map(u=>{
-                  const active=form.userIds.includes(u.id);
-                  return <button key={u.id} onClick={()=>setForm(f=>({...f,userIds:active?f.userIds.filter(id=>id!==u.id):[...f.userIds,u.id]}))} style={{background:active?u.color:"rgba(255,255,255,0.06)",color:"#fff",border:active?`1px solid ${u.color}`:"1px solid transparent",borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:700,cursor:"pointer",opacity:active?1:0.5}}>{u.username[0].toUpperCase()} {u.username}{active?" ✓":""}</button>;
-                })}
+                {allUsers.map(u=>{const active=form.userIds.includes(u.id);return <button key={u.id} onClick={()=>setForm(f=>({...f,userIds:active?f.userIds.filter(id=>id!==u.id):[...f.userIds,u.id]}))} style={{background:active?u.color:"rgba(255,255,255,0.06)",color:"#fff",border:active?`1px solid ${u.color}`:"1px solid transparent",borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:700,cursor:"pointer",opacity:active?1:0.5}}>{u.username[0].toUpperCase()} {u.username}{active?" ✓":""}</button>;})}
               </div>
             </div>
 
@@ -960,11 +1333,7 @@ function App() {
               <div style={{marginBottom:14}}>
                 <label style={{fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:8}}>Koppel aan team (optioneel)</label>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  {myApprovedTeams.map(team=>{
-                    const active=form.teamIds.includes(team.id);
-                    const tc=team.color||"#7c7cff";
-                    return <button key={team.id} onClick={()=>setForm(f=>({...f,teamIds:active?f.teamIds.filter(id=>id!==team.id):[...f.teamIds,team.id]}))} style={{background:active?tc+"33":"rgba(255,255,255,0.06)",color:active?tc:"rgba(255,255,255,0.55)",border:active?`1px solid ${tc}`:"1px solid transparent",borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>👥 {team.name}{active?" ✓":""}</button>;
-                  })}
+                  {myApprovedTeams.map(team=>{const active=form.teamIds.includes(team.id);const tc=team.color||"#7c7cff";return <button key={team.id} onClick={()=>setForm(f=>({...f,teamIds:active?f.teamIds.filter(id=>id!==team.id):[...f.teamIds,team.id]}))} style={{background:active?tc+"33":"rgba(255,255,255,0.06)",color:active?tc:"rgba(255,255,255,0.55)",border:active?`1px solid ${tc}`:"1px solid transparent",borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>👥 {team.name}{active?" ✓":""}</button>;})}
                 </div>
                 {form.teamIds.length>0&&<p style={{fontSize:11,opacity:0.35,marginTop:5}}>Alleen teamleden kunnen deze taak zien</p>}
               </div>
@@ -985,11 +1354,29 @@ function App() {
               </div>
             </div>
 
-            <div style={{marginBottom:18}}>
+            {/* Herhaling */}
+            <div style={{marginBottom:14}}>
+              <label style={{fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>🔁 Herhaling</label>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {RECURRENCE_OPTIONS.map(r=>(
+                  <button key={r.value} onClick={()=>setForm(f=>({...f,recurrenceType:r.value}))} style={{background:form.recurrenceType===r.value?"rgba(255,211,61,0.2)":"rgba(255,255,255,0.05)",color:form.recurrenceType===r.value?"#FFD93D":"rgba(255,255,255,0.55)",border:form.recurrenceType===r.value?"1px solid rgba(255,211,61,0.4)":"1px solid transparent",borderRadius:10,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{r.label}</button>
+                ))}
+              </div>
+              {form.recurrenceType!=="none"&&<p style={{fontSize:11,opacity:0.35,marginTop:6}}>🔁 Wordt elke week opnieuw aangemaakt op basis van de gekozen dag</p>}
+            </div>
+
+            {/* Label */}
+            <div style={{marginBottom:14}}>
               <label style={{fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Label</label>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                 {categories.map(c=><button key={c.id} onClick={()=>setForm(f=>({...f,category:c.id}))} style={{background:form.category===c.id?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.05)",color:"#fff",border:form.category===c.id?"1px solid rgba(255,255,255,0.3)":"1px solid transparent",borderRadius:10,padding:"7px 11px",fontSize:12,fontWeight:600,cursor:"pointer"}}>{c.icon} {c.label}</button>)}
               </div>
+            </div>
+
+            {/* Notities */}
+            <div style={{marginBottom:18}}>
+              <label style={{fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>📝 Notitie (optioneel)</label>
+              <textarea placeholder="Extra informatie, aanwijzingen..." value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} rows={3} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:"12px 14px",color:"#fff",fontSize:13,outline:"none",resize:"vertical",fontFamily:"'DM Sans',sans-serif",lineHeight:1.5}}/>
             </div>
 
             <button onClick={saveTask} disabled={saving} style={{width:"100%",padding:"15px",background:saving?"rgba(255,255,255,0.1)":`linear-gradient(135deg,${currentUser.color},${currentUser.color}bb)`,color:"#fff",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:saving?"not-allowed":"pointer"}}>{saving?"Opslaan...":editingTask?"Wijzigingen opslaan ✓":"Taak toevoegen 🚀"}</button>
