@@ -438,10 +438,12 @@ function BoodschappenScherm({onClose,currentUser,myTeamIds,allTeams,showNotif}) 
         )}
 
         {/* Toevoegen */}
-        <div style={{display:"flex",gap:8,marginBottom:20}}>
-          <input placeholder="Item toevoegen..." value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&voegToe()} style={{flex:2,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:"11px 14px",color:"#fff",fontSize:14,outline:"none"}}/>
-          <input placeholder="Aantal" value={newQty} onChange={e=>setNewQty(e.target.value)} onKeyDown={e=>e.key==="Enter"&&voegToe()} style={{flex:1,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:"11px 14px",color:"#fff",fontSize:14,outline:"none"}}/>
-          <button onClick={voegToe} disabled={saving} style={{background:"linear-gradient(135deg,#4ECDC4,#2ecc71)",border:"none",borderRadius:12,padding:"11px 16px",color:"#fff",fontSize:18,fontWeight:900,cursor:"pointer",flexShrink:0}}>+</button>
+        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
+          <input placeholder="Item toevoegen..." value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&voegToe()} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:"11px 14px",color:"#fff",fontSize:14,outline:"none"}}/>
+          <div style={{display:"flex",gap:8}}>
+            <input placeholder="Aantal (optioneel)" value={newQty} onChange={e=>setNewQty(e.target.value)} onKeyDown={e=>e.key==="Enter"&&voegToe()} style={{flex:1,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:"11px 14px",color:"#fff",fontSize:14,outline:"none"}}/>
+            <button onClick={voegToe} disabled={saving} style={{background:"linear-gradient(135deg,#4ECDC4,#2ecc71)",border:"none",borderRadius:12,padding:"11px 20px",color:"#fff",fontSize:14,fontWeight:800,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>+ Toevoegen</button>
+          </div>
         </div>
 
         {loading&&<div style={{display:"flex",justifyContent:"center",padding:30}}><div className="spinner"/></div>}
