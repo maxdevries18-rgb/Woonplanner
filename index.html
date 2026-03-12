@@ -15,10 +15,15 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <style>
+    :root {
+      --bg-color: #1a1a2e;
+      --bg-gradient: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      --panel-bg: linear-gradient(180deg, #1e1e3f, #16163a);
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { overflow-x: hidden; max-width: 100vw; }
-    html { background: #1a1a2e; height: 100%; }
-    body { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); background-attachment: fixed; min-height: 100%; min-height: -webkit-fill-available; overscroll-behavior: none; }
+    html { background: var(--bg-color); height: 100%; }
+    body { background: var(--bg-gradient); background-attachment: fixed; min-height: 100%; min-height: -webkit-fill-available; overscroll-behavior: none; }
     #root { min-height: 100vh; min-height: -webkit-fill-available; }
     ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
     .task-card { transition: all 0.2s ease; } .task-card:hover { transform: translateY(-2px); }
@@ -43,7 +48,7 @@
     .toggle::after { content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform 0.2s; }
     .toggle.on::after { transform:translateX(18px); }
     .menu-overlay { position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:800;backdrop-filter:blur(3px); }
-    .menu-panel { position:fixed;top:0;left:0;bottom:0;width:280px;background:linear-gradient(180deg,#1e1e3f,#16163a);border-right:1px solid rgba(255,255,255,0.08);z-index:801;padding:0;display:flex;flex-direction:column;animation:slideFromLeft 0.25s ease; }
+    .menu-panel { position:fixed;top:0;left:0;bottom:0;width:280px;background:var(--panel-bg);border-right:1px solid rgba(255,255,255,0.08);z-index:801;padding:0;display:flex;flex-direction:column;animation:slideFromLeft 0.25s ease; }
     @keyframes slideFromLeft { from{transform:translateX(-100%);}to{transform:translateX(0);} }
     @media (max-width:600px) {
       .week-grid { display:flex;flex-direction:column;gap:8px; }
@@ -81,6 +86,14 @@ const RECURRENCE_OPTIONS = [
   {value:"monthly",label:"Elke maand (zelfde datum)"},
   {value:"monthly_last",label:"Laatste van de maand (zelfde dag)"},
 ];
+const THEME_COLORS = [
+  { id: "blue", name: "Deep Blue", color: "#1a1a2e", gradient: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)", panel: "linear-gradient(180deg, #1e1e3f, #16163a)" },
+  { id: "midnight", name: "Midnight", color: "#050505", gradient: "linear-gradient(135deg, #050505 0%, #111111 50%, #1a1a1a 100%)", panel: "linear-gradient(180deg, #1a1a1a, #0a0a0a)" },
+  { id: "forest", name: "Forest", color: "#0a1f0a", gradient: "linear-gradient(135deg, #0a1f0a 0%, #112a11 50%, #1a3a1a 100%)", panel: "linear-gradient(180deg, #112a11, #0a1f0a)" },
+  { id: "aubergine", name: "Aubergine", color: "#1a0a1f", gradient: "linear-gradient(135deg, #1a0a1f 0%, #2a112a 50%, #3a1a3a 100%)", panel: "linear-gradient(180deg, #2a112a, #1a0a1f)" },
+  { id: "ocean", name: "Ocean", color: "#0a1f2e", gradient: "linear-gradient(135deg, #0a1f2e 0%, #112a3a 50%, #1a3a4a 100%)", panel: "linear-gradient(180deg, #112a3a, #0a1f2e)" },
+];
+
 const RECHTEN = [
   {key:"can_create_tasks",label:"Taken aanmaken"},
   {key:"can_edit_own_tasks",label:"Eigen taken bewerken"},
@@ -177,7 +190,7 @@ function Toggle({value,onChange}) {
 }
 
 // ── Hamburger Menu ─────────────────────────────────────────────────────────────
-function HamburgerMenu({currentUser,pendingCount,onOpenBeheer,onOpenLabels,onOpenStats,onOpenBoodschappen,onWissel,onClose}) {
+function HamburgerMenu({currentUser,pendingCount,theme,onThemeChange,onOpenBeheer,onOpenLabels,onOpenStats,onOpenBoodschappen,onWissel,onClose}) {
   const menuItems = [
     {icon:"⚙️", label:"Teams beheren", badge:pendingCount>0?pendingCount:null, onClick:()=>{onOpenBeheer("teams");onClose();}},
     {icon:"👤", label:"Gebruikers beheren", show:currentUser.is_admin||currentUser.can_view_users, onClick:()=>{onOpenBeheer("gebruikers");onClose();}},
@@ -210,6 +223,18 @@ function HamburgerMenu({currentUser,pendingCount,onOpenBeheer,onOpenLabels,onOpe
               {item.badge&&<span style={{background:"#FF6B6B",color:"#fff",borderRadius:20,padding:"2px 7px",fontSize:11,fontWeight:900}}>{item.badge}</span>}
             </button>
           ))}
+
+          {/* Theme Picker */}
+          <div style={{marginTop:12,padding:"10px 20px"}}>
+            <div style={{fontSize:11,fontWeight:700,opacity:0.4,textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Uiterlijk</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {THEME_COLORS.map(t=>(
+                <button key={t.id} onClick={()=>onThemeChange(t)} title={t.name} style={{width:28,height:28,borderRadius:"50%",background:t.gradient,border:theme.id===t.id?"2px solid #fff":"2px solid rgba(255,255,255,0.1)",cursor:"pointer",padding:0,transition:"transform 0.1s"}}
+                  onMouseEnter={e=>e.currentTarget.style.transform="scale(1.1)"}
+                  onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}/>
+              ))}
+            </div>
+          </div>
         </div>
         {/* Wissel onderaan */}
         <div style={{borderTop:"1px solid rgba(255,255,255,0.08)",padding:"12px 20px",paddingBottom:"calc(12px + env(safe-area-inset-bottom))"}}>
@@ -291,7 +316,7 @@ function StatistiekenScherm({onClose,allUsers,allTeams,myTeamIds}) {
 
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:600,backdropFilter:"blur(4px)"}}>
-      <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(180deg,#1e1e3f,#16163a)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",width:"100%",maxWidth:580,maxHeight:"92vh",overflowY:"auto",fontFamily:"'DM Sans',sans-serif"}}>
+      <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"var(--panel-bg)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",width:"100%",maxWidth:580,maxHeight:"92vh",overflowY:"auto",fontFamily:"'DM Sans',sans-serif"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
           <h3 style={{fontSize:20,fontWeight:900,color:"#f0f0f0",fontFamily:"'Space Mono',monospace"}}>📊 Statistieken</h3>
           <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:13}}>✕</button>
@@ -421,7 +446,7 @@ function BoodschappenScherm({onClose,currentUser,myTeamIds,allTeams,showNotif}) 
 
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:600,backdropFilter:"blur(4px)"}}>
-      <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(180deg,#1e1e3f,#16163a)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto",fontFamily:"'DM Sans',sans-serif"}}>
+      <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"var(--panel-bg)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto",fontFamily:"'DM Sans',sans-serif"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <h3 style={{fontSize:20,fontWeight:900,color:"#f0f0f0",fontFamily:"'Space Mono',monospace"}}>🛒 Boodschappenlijst</h3>
           <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:13}}>✕</button>
@@ -673,7 +698,7 @@ function BeheerScherm({currentUser,onClose,showNotif,initialTab}) {
 
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:600,backdropFilter:"blur(4px)"}}>
-      <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(180deg,#1e1e3f,#16163a)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 24px 48px",width:"100%",maxWidth:560,maxHeight:"92vh",overflowY:"auto",fontFamily:"'DM Sans',sans-serif"}}>
+      <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"var(--panel-bg)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 24px 48px",width:"100%",maxWidth:560,maxHeight:"92vh",overflowY:"auto",fontFamily:"'DM Sans',sans-serif"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <h3 style={{fontSize:20,fontWeight:900,color:"#f0f0f0",fontFamily:"'Space Mono',monospace"}}>⚙️ Beheer</h3>
           <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:13}}>✕ Sluiten</button>
@@ -950,6 +975,14 @@ function App() {
   const [weekOffset,setWeekOffset]=useState(0);
   const [holidays,setHolidays]=useState({});
   const [pendingCount,setPendingCount]=useState(0);
+  const [theme,setTheme]=useState(()=>{try{const s=localStorage.getItem("woonplanner_theme");return s?JSON.parse(s):THEME_COLORS[0];}catch(e){return THEME_COLORS[0];}});
+
+  useEffect(()=>{
+    document.documentElement.style.setProperty("--bg-color", theme.color);
+    document.documentElement.style.setProperty("--bg-gradient", theme.gradient);
+    document.documentElement.style.setProperty("--panel-bg", theme.panel);
+    localStorage.setItem("woonplanner_theme", JSON.stringify(theme));
+  },[theme]);
 
   const weekDates=getWeekDates(weekOffset);
   const todayIndex=weekOffset===0?(()=>{const d=new Date().getDay();return d===0?6:d-1;})():-1;
@@ -1156,7 +1189,7 @@ function App() {
         </div>
       )}
 
-      {showMenu&&<HamburgerMenu currentUser={currentUser} pendingCount={pendingCount}
+      {showMenu&&<HamburgerMenu currentUser={currentUser} pendingCount={pendingCount} theme={theme} onThemeChange={setTheme}
         onOpenBeheer={(tab)=>{setBeheerTab(tab);setShowBeheer(true);}}
         onOpenLabels={()=>setShowLabelManager(true)}
         onOpenStats={()=>setShowStats(true)}
@@ -1170,7 +1203,7 @@ function App() {
       {showBoodschappen&&<BoodschappenScherm onClose={()=>setShowBoodschappen(false)} currentUser={currentUser} myTeamIds={myTeamIds} allTeams={allTeams} showNotif={showNotif}/>}
 
       {/* ── HEADER ── */}
-      <div style={{paddingTop:"calc(14px + env(safe-area-inset-top))",paddingBottom:10,paddingLeft:16,paddingRight:16,background:"rgba(26,26,46,0.97)",borderBottom:"1px solid rgba(255,255,255,0.06)",backdropFilter:"blur(10px)",position:"sticky",top:0,zIndex:100}}>
+      <div style={{paddingTop:"calc(14px + env(safe-area-inset-top))",paddingBottom:10,paddingLeft:16,paddingRight:16,background:theme.color+"f7",borderBottom:"1px solid rgba(255,255,255,0.06)",backdropFilter:"blur(10px)",position:"sticky",top:0,zIndex:100}}>
         <div style={{maxWidth:900,margin:"0 auto"}}>
 
           {/* Rij 1 */}
@@ -1317,7 +1350,7 @@ function App() {
       {/* TAAK MODAL */}
       {showModal&&(
         <div onClick={()=>{setShowModal(false);setEditingTask(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:500,backdropFilter:"blur(4px)"}}>
-          <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(180deg,#1e1e3f,#16163a)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto"}}>
+          <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"var(--panel-bg)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto"}}>
             <h3 style={{fontSize:17,fontWeight:900,color:"#f0f0f0",fontFamily:"'Space Mono',monospace",marginBottom:18}}>{editingTask?"✏️ Taak wijzigen":"➕ Nieuwe taak"}</h3>
             <input placeholder="Wat moet er gebeuren?" value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&saveTask()} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:"13px 15px",color:"#fff",fontSize:15,marginBottom:14,outline:"none"}}/>
 
@@ -1389,7 +1422,7 @@ function App() {
       {/* LABEL MANAGER */}
       {showLabelManager&&(
         <div onClick={()=>setShowLabelManager(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:500,backdropFilter:"blur(4px)"}}>
-          <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"linear-gradient(180deg,#1e1e3f,#16163a)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",width:"100%",maxWidth:500,maxHeight:"90vh",overflowY:"auto"}}>
+          <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"var(--panel-bg)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",width:"100%",maxWidth:500,maxHeight:"90vh",overflowY:"auto"}}>
             <h3 style={{fontSize:18,fontWeight:900,marginBottom:4,color:"#f0f0f0",fontFamily:"'Space Mono',monospace"}}>🏷️ Labels beheren</h3>
             <p style={{fontSize:12,opacity:0.4,marginBottom:18}}>Maak je eigen labels aan</p>
             <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
