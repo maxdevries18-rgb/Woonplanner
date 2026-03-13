@@ -161,8 +161,6 @@ function recurringTaskBelongsToWeek(task, mondayStr) {
   }
   if(task.recurrenceType==="monthly") {
     // Zelfde dag van de maand - check of die dag in deze week valt
-    const origDate = orig.getDate() + task.dayIndex;
-    // Simplified: check if recurrenceDay (stored as day of month) falls in this week
     for(let i=0;i<7;i++){
       const d=new Date(mon); d.setDate(mon.getDate()+i);
       if(d.getDate()===task.recurrenceDay) return true;
@@ -175,7 +173,6 @@ function recurringTaskBelongsToWeek(task, mondayStr) {
       const d=new Date(mon); d.setDate(mon.getDate()+i);
       const dayOfWeek=(d.getDay()+6)%7;
       if(dayOfWeek===task.dayIndex){
-        // Check if this is the last occurrence of this weekday in the month
         const nextWeek=new Date(d); nextWeek.setDate(d.getDate()+7);
         if(nextWeek.getMonth()!==d.getMonth()) return true;
       }
@@ -217,7 +214,6 @@ function HamburgerMenu({currentUser,pendingCount,theme,onThemeChange,onOpenBehee
     <div>
       <div className="menu-overlay" onClick={onClose}/>
       <div className="menu-panel">
-        {/* Gebruikersprofiel bovenaan */}
         <div style={{padding:"calc(20px + env(safe-area-inset-top)) 20px 20px",borderBottom:"1px solid rgba(255,255,255,0.08)",background:"rgba(255,255,255,0.03)"}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <div style={{width:44,height:44,borderRadius:"50%",background:currentUser.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:900,flexShrink:0}}>{currentUser.username[0].toUpperCase()}</div>
@@ -227,7 +223,6 @@ function HamburgerMenu({currentUser,pendingCount,theme,onThemeChange,onOpenBehee
             </div>
           </div>
         </div>
-        {/* Menu items */}
         <div style={{flex:1,overflowY:"auto",padding:"12px 0"}}>
           {menuItems.filter(m=>m.show!==false).map((item,i)=>(
             <button key={i} onClick={item.onClick} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"13px 20px",background:"transparent",border:"none",color:"#f0f0f0",cursor:"pointer",textAlign:"left",transition:"background 0.15s",fontSize:15,fontWeight:600,position:"relative"}}
@@ -238,8 +233,6 @@ function HamburgerMenu({currentUser,pendingCount,theme,onThemeChange,onOpenBehee
               {item.badge&&<span style={{background:"#FF6B6B",color:"#fff",borderRadius:20,padding:"2px 7px",fontSize:11,fontWeight:900}}>{item.badge}</span>}
             </button>
           ))}
-
-          {/* Theme Picker */}
           <div style={{marginTop:12,padding:"10px 20px"}}>
             <div style={{fontSize:11,fontWeight:700,opacity:0.4,textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Uiterlijk</div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -251,7 +244,6 @@ function HamburgerMenu({currentUser,pendingCount,theme,onThemeChange,onOpenBehee
             </div>
           </div>
         </div>
-        {/* Wissel onderaan */}
         <div style={{borderTop:"1px solid rgba(255,255,255,0.08)",padding:"12px 20px",paddingBottom:"calc(12px + env(safe-area-inset-bottom))"}}>
           <button onClick={()=>{onWissel();onClose();}} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"11px 0",background:"transparent",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:14,fontWeight:600}}>
             <span style={{fontSize:18,width:28,textAlign:"center"}}>👋</span>
@@ -291,17 +283,15 @@ function StatistiekenScherm({onClose,allUsers,allTeams,myTeamIds}) {
   const periodeStart=getPeriodeStart();
   const periodeLabel={"week":"Deze week","maand":"Deze maand","kwartaal":"Dit kwartaal","jaar":"Dit jaar"};
 
-  // Filter taken op periode (op basis van week_monday)
   const periodeTaken=allTasks.filter(t=>{
     if(!t.week_monday) return false;
     return new Date(t.week_monday)>=periodeStart;
   });
 
-  // Stats per gebruiker
   const userStats=allUsers.map(u=>{
     const uid=String(u.id);
     const eigen=periodeTaken.filter(t=>{
-      if(!t.user_id) return true; // iedereen-taken tellen mee
+      if(!t.user_id) return true;
       return String(t.user_id).split(",").includes(uid);
     });
     const gedaan=eigen.filter(t=>t.done).length;
@@ -309,11 +299,9 @@ function StatistiekenScherm({onClose,allUsers,allTeams,myTeamIds}) {
     return {user:u,totaal,gedaan,open:totaal-gedaan,pct:totaal>0?Math.round(gedaan/totaal*100):0};
   }).sort((a,b)=>b.gedaan-a.gedaan);
 
-  // Totalen
   const totaalAlle=periodeTaken.length;
   const gedaanAlle=periodeTaken.filter(t=>t.done).length;
 
-  // Wekelijkse grafiek (laatste 8 weken)
   function getWeeklyData() {
     const weeks=[];
     for(let i=7;i>=0;i--){
@@ -331,18 +319,14 @@ function StatistiekenScherm({onClose,allUsers,allTeams,myTeamIds}) {
 
   return (
     <Modal title="📊 Statistieken" onClose={onClose} maxWidth={580}>
-        {/* Periode selector */}
         <div style={{display:"flex",gap:6,marginBottom:20,background:"rgba(255,255,255,0.04)",borderRadius:12,padding:4}}>
           {periodes.map(p=>(
             <button key={p.k} onClick={()=>setPeriode(p.k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:periode===p.k?"rgba(255,255,255,0.15)":"transparent",color:periode===p.k?"#fff":"rgba(255,255,255,0.45)",transition:"all 0.15s"}}>{p.l}</button>
           ))}
         </div>
-
         {loading&&<div style={{display:"flex",justifyContent:"center",padding:40}}><div className="spinner"/></div>}
-
         {!loading&&(
           <div>
-            {/* Totalen */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:20}}>
               {[
                 {label:"Totaal",value:totaalAlle,icon:"📋",color:"#7c7cff"},
@@ -357,8 +341,6 @@ function StatistiekenScherm({onClose,allUsers,allTeams,myTeamIds}) {
                 </div>
               ))}
             </div>
-
-            {/* Per gebruiker */}
             <div style={{marginBottom:20}}>
               <p style={{fontSize:11,fontWeight:700,opacity:0.5,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Per persoon</p>
               {userStats.map(s=>(
@@ -369,15 +351,12 @@ function StatistiekenScherm({onClose,allUsers,allTeams,myTeamIds}) {
                     <span style={{fontSize:12,color:"#4ECDC4",fontWeight:700}}>{s.gedaan}/{s.totaal}</span>
                     <span style={{fontSize:12,color:s.pct>=75?"#4ECDC4":s.pct>=50?"#FFD93D":"#FF6B6B",fontWeight:900}}>{s.pct}%</span>
                   </div>
-                  {/* Voortgangsbalk */}
                   <div style={{background:"rgba(255,255,255,0.08)",borderRadius:6,height:6,overflow:"hidden"}}>
                     <div style={{width:`${s.pct}%`,height:"100%",background:s.user.color,borderRadius:6,transition:"width 0.5s ease"}}/>
                   </div>
                 </div>
               ))}
             </div>
-
-            {/* Weekgrafiek */}
             <div>
               <p style={{fontSize:11,fontWeight:700,opacity:0.5,letterSpacing:1,textTransform:"uppercase",marginBottom:12}}>Afgelopen 8 weken</p>
               <div style={{display:"flex",gap:6,alignItems:"flex-end",height:100}}>
@@ -454,7 +433,6 @@ function BoodschappenScherm({onClose,currentUser,myTeamIds,allTeams,showNotif}) 
 
   return (
     <Modal title="🛒 Boodschappenlijst" onClose={onClose} maxWidth={500}>
-        {/* Team selector */}
         {myTeams.length>0&&(
           <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
             <button onClick={()=>setFilterTeam(null)} style={{background:filterTeam===null?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.05)",border:filterTeam===null?"1px solid rgba(255,255,255,0.25)":"1px solid transparent",borderRadius:20,padding:"5px 12px",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>👤 Persoonlijk</button>
@@ -463,8 +441,6 @@ function BoodschappenScherm({onClose,currentUser,myTeamIds,allTeams,showNotif}) 
             );})}
           </div>
         )}
-
-        {/* Toevoegen */}
         <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
           <input placeholder="Item toevoegen..." value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&voegToe()} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:"11px 14px",color:"#fff",fontSize:14,outline:"none"}}/>
           <div style={{display:"flex",gap:8}}>
@@ -472,12 +448,9 @@ function BoodschappenScherm({onClose,currentUser,myTeamIds,allTeams,showNotif}) 
             <button onClick={voegToe} disabled={saving} style={{background:"linear-gradient(135deg,#4ECDC4,#2ecc71)",border:"none",borderRadius:12,padding:"11px 20px",color:"#fff",fontSize:14,fontWeight:800,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>+ Toevoegen</button>
           </div>
         </div>
-
         {loading&&<div style={{display:"flex",justifyContent:"center",padding:30}}><div className="spinner"/></div>}
-
         {!loading&&(
           <div>
-            {/* Open items */}
             {open.length>0&&(
               <div style={{marginBottom:16}}>
                 {open.map(item=>(
@@ -492,8 +465,6 @@ function BoodschappenScherm({onClose,currentUser,myTeamIds,allTeams,showNotif}) 
                 ))}
               </div>
             )}
-
-            {/* Afgevinkt */}
             {gedaan.length>0&&(
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
@@ -509,9 +480,8 @@ function BoodschappenScherm({onClose,currentUser,myTeamIds,allTeams,showNotif}) 
                 ))}
               </div>
             )}
-
             {items.length===0&&(
-              <div style={{textAlign:"center",padding:"40px 20px",opacity:0.3}}>
+              <div style={{textAlign:"center",padding:"40px 20px",opacity:0.3}>
                 <div style={{fontSize:40,marginBottom:12}}>🛒</div>
                 <div style={{fontSize:14,fontWeight:600}}>Lijst is leeg</div>
               </div>
@@ -819,23 +789,13 @@ function BeheerScherm({currentUser,onClose,showNotif,initialTab}) {
                     </div>
                   );
                 })}
-                {(()=>{
-                  const teamMemberIds=membersOf(selTeam.id).map(m=>m.user_id);
-                  const nietLeden=allUsers.filter(u=>!teamMemberIds.includes(u.id));
-                  if(!nietLeden.length) return null;
-                  return (
-                    <div style={{marginTop:16,borderTop:"1px solid rgba(255,255,255,0.08)",paddingTop:14}}>
-                      <span style={sLabel}>Lid toevoegen</span>
-                      {nietLeden.map(u=>(
-                        <div key={u.id} style={{display:"flex",alignItems:"center",gap:12,background:"rgba(255,255,255,0.03)",borderRadius:10,padding:"10px 14px",marginBottom:6}}>
-                          <div style={{width:28,height:28,borderRadius:"50%",background:u.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,flexShrink:0}}>{u.username[0].toUpperCase()}</div>
-                          <span style={{flex:1,fontWeight:600,fontSize:14,opacity:0.8}}>{u.username}</span>
-                          <button onClick={()=>voegLidToe(selTeam.id,u.id)} style={{background:"rgba(78,205,196,0.15)",border:"1px solid rgba(78,205,196,0.3)",borderRadius:8,padding:"5px 12px",color:"#4ECDC4",cursor:"pointer",fontSize:12,fontWeight:700}}>+ Toevoegen</button>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
+                {nietLedenOf(selTeam.id).map(u=>(
+                  <div key={u.id} style={{display:"flex",alignItems:"center",gap:12,background:"rgba(255,255,255,0.03)",borderRadius:10,padding:"10px 14px",marginBottom:6}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",background:u.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,flexShrink:0}}>{u.username[0].toUpperCase()}</div>
+                    <span style={{flex:1,fontWeight:600,fontSize:14,opacity:0.8}}>{u.username}</span>
+                    <button onClick={()=>voegLidToe(selTeam.id,u.id)} style={{background:"rgba(78,205,196,0.15)",border:"1px solid rgba(78,205,196,0.3)",borderRadius:8,padding:"5px 12px",color:"#4ECDC4",cursor:"pointer",fontSize:12,fontWeight:700}}>+ Toevoegen</button>
+                  </div>
+                ))}
                 {(currentUser.is_admin||currentUser.can_delete_teams)&&<button onClick={()=>verwijderTeam(selTeam.id)} style={{width:"100%",marginTop:16,padding:"12px",background:"rgba(255,80,80,0.12)",border:"1px solid rgba(255,80,80,0.25)",borderRadius:12,color:"#FF6B6B",cursor:"pointer",fontSize:14,fontWeight:700}}>Team verwijderen</button>}
               </div>
             )}
@@ -873,7 +833,6 @@ function BeheerScherm({currentUser,onClose,showNotif,initialTab}) {
                     ))}
                   </div>
                 )}
-                {currentUser.is_admin&&user.is_admin&&user.id!==currentUser.id&&<p style={{fontSize:12,opacity:0.4,fontStyle:"italic"}}>Admins hebben alle rechten automatisch</p>}
                 {!currentUser.is_admin&&(
                   <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                     {RECHTEN.map(r=>(
@@ -887,6 +846,10 @@ function BeheerScherm({currentUser,onClose,showNotif,initialTab}) {
         )}
       </Modal>
   );
+  function nietLedenOf(teamId){
+    const memIds=membersOf(teamId).map(m=>m.user_id);
+    return allUsers.filter(u=>!memIds.includes(u.id));
+  }
 }
 
 // ── TaskCard ──────────────────────────────────────────────────────────────────
@@ -1017,15 +980,12 @@ function App() {
         return true;
       }).map(t=>normalizeTask(t,map[t.id]||[]));
 
-      // Genereer virtuele instanties van terugkerende taken voor de huidige week
       const recurring=allNorm.filter(t=>t.recurrenceType&&t.recurrenceType!=="none");
       const virtual=[];
       recurring.forEach(t=>{
         if(recurringTaskBelongsToWeek(t,currentMonday)){
-          // Bepaal de juiste dayIndex voor deze week
           let di=t.dayIndex;
           if(t.recurrenceType==="monthly"||t.recurrenceType==="monthly_last"){
-            // Zoek welke dag in de week past
             for(let i=0;i<7;i++){
               const d=new Date(weekDates[0]); d.setDate(weekDates[0].getDate()+i);
               if(t.recurrenceType==="monthly"&&d.getDate()===t.recurrenceDay){di=i;break;}
@@ -1108,7 +1068,6 @@ function App() {
       } else {
         const targetId=editingTask?.isVirtual?editingTask.originalId:null;
         if(targetId){
-          // Virtuele instantie bewerken = origineel bijwerken
           await supabase.from("tasks").update({title:form.title,user_id,category:form.category,deadline:form.deadline||"",notes:form.notes||""}).eq("id",targetId);
           showNotif("✏️ Bijgewerkt!",form.title);
         } else {
@@ -1127,7 +1086,6 @@ function App() {
 
   async function toggleDone(id,cur){
     if(String(id).startsWith("rec_")){
-      // Virtuele terugkerende taak: sla een echte instantie op voor deze week
       const vTask=tasks.find(t=>t.id===id);
       if(!vTask) return;
       const user_id=vTask.userIds===null?null:vTask.userIds.join(",");
@@ -1201,14 +1159,12 @@ function App() {
 
   return (
     <div style={{minHeight:"100vh",fontFamily:"'DM Sans',sans-serif",color:"#f0f0f0",paddingBottom:"calc(80px + env(safe-area-inset-bottom))"}}>
-
       {notification&&(
         <div className="notif" style={{position:"fixed",top:"calc(20px + env(safe-area-inset-top))",right:20,zIndex:9999,background:"linear-gradient(135deg,#2d2d5e,#3d3d7e)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:16,padding:"14px 20px",boxShadow:"0 20px 60px rgba(0,0,0,0.5)",maxWidth:280}}>
           <div style={{fontWeight:700,fontSize:14}}>{notification.title}</div>
           {notification.body&&<div style={{fontSize:12,opacity:0.7,marginTop:2}}>{notification.body}</div>}
         </div>
       )}
-
       {showMenu&&<HamburgerMenu currentUser={currentUser} pendingCount={pendingCount} theme={theme} onThemeChange={setTheme}
         onOpenBeheer={(tab)=>{setBeheerTab(tab);setShowBeheer(true);}}
         onOpenLabels={()=>setShowLabelManager(true)}
@@ -1217,27 +1173,20 @@ function App() {
         onWissel={()=>{localStorage.removeItem("woonplanner_user_id");setCurrentUser(null);}}
         onClose={()=>setShowMenu(false)}
       />}
-
       {showBeheer&&<BeheerScherm currentUser={currentUser} initialTab={beheerTab} onClose={()=>{setShowBeheer(false);loadAll();}} showNotif={showNotif}/>}
       {showStats&&<StatistiekenScherm onClose={()=>setShowStats(false)} allUsers={allUsers} allTeams={allTeams} myTeamIds={myTeamIds}/>}
       {showBoodschappen&&<BoodschappenScherm onClose={()=>setShowBoodschappen(false)} currentUser={currentUser} myTeamIds={myTeamIds} allTeams={allTeams} showNotif={showNotif}/>}
-
-      {/* ── HEADER ── */}
       <div style={{paddingTop:"calc(14px + env(safe-area-inset-top))",paddingBottom:10,paddingLeft:16,paddingRight:16,background:theme.color+"f7",borderBottom:"1px solid rgba(255,255,255,0.06)",backdropFilter:"blur(10px)",position:"sticky",top:0,zIndex:100}}>
         <div style={{maxWidth:900,margin:"0 auto"}}>
-
-          {/* Rij 1 */}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8}}>
             <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-              {/* Hamburger */}
               <button onClick={()=>setShowMenu(true)} style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"#fff",fontSize:18,position:"relative",flexShrink:0}}>
                 ☰
                 {pendingCount>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#FF6B6B",color:"#fff",borderRadius:"50%",width:14,height:14,fontSize:9,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900}}>{pendingCount}</span>}
               </button>
               <h1 style={{fontSize:18,fontWeight:900,letterSpacing:-1,fontFamily:"'Space Mono',monospace"}}>🏠 WoonPlanner</h1>
             </div>
-            {/* Gebruikersfilters */}
-            <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
+            <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",justify:"flex-end"}}>
               {[{id:"all",username:"Allen",color:"#888"},...allUsers].map(u=>{
                 const active=String(filterUser)===String(u.id);
                 return <button key={u.id} onClick={()=>setFilterUser(String(u.id))} style={{background:active?u.color:"rgba(255,255,255,0.06)",color:"#fff",border:"none",borderRadius:20,padding:"3px 9px",fontSize:11,fontWeight:700,cursor:"pointer",opacity:active?1:0.5}}>{u.username}</button>;
@@ -1247,14 +1196,10 @@ function App() {
               {currentUser.is_admin&&<span style={{fontSize:10,color:"#FFD93D"}}>👑</span>}
             </div>
           </div>
-
-          {/* Rij 2: teamfilter */}
           <div style={{display:"flex",gap:5,marginBottom:8,overflowX:"auto",paddingBottom:2}}>
             <button onClick={()=>setFilterTeam("all")} style={{background:filterTeam==="all"?"rgba(255,255,255,0.14)":"rgba(255,255,255,0.04)",border:filterTeam==="all"?"1px solid rgba(255,255,255,0.22)":"1px solid transparent",borderRadius:20,padding:"3px 11px",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>Alle teams</button>
             {myApprovedTeams.map(t=>{const tc=t.color||"#7c7cff";const active=String(filterTeam)===String(t.id);return <button key={t.id} onClick={()=>setFilterTeam(String(t.id))} style={{background:active?tc+"33":"rgba(255,255,255,0.04)",border:active?`1px solid ${tc}66`:"1px solid transparent",borderRadius:20,padding:"3px 11px",color:active?tc:"rgba(255,255,255,0.45)",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>👥 {t.name}</button>;})}
           </div>
-
-          {/* Rij 3: views + weeknav */}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             <div style={{display:"flex",gap:3,background:"rgba(255,255,255,0.05)",borderRadius:12,padding:3}}>
               {[{id:"week",label:"📅 Week"},{id:"day",label:"🌤 Dag"},{id:"tasks",label:"📋 Taken"}].map(v=>(
@@ -1275,11 +1220,7 @@ function App() {
           </div>
         </div>
       </div>
-
-      {/* ── MAIN ── */}
       <div style={{maxWidth:900,margin:"0 auto",padding:"16px"}}>
-
-        {/* WEEK VIEW */}
         {view==="week"&&(
           <div className="week-grid slide-in">
             {DAYS.map((day,i)=>{
@@ -1311,8 +1252,6 @@ function App() {
             })}
           </div>
         )}
-
-        {/* DAY VIEW */}
         {view==="day"&&(
           <div className="slide-in">
             <div style={{display:"flex",gap:6,marginBottom:16,overflowX:"auto",paddingBottom:4}}>
@@ -1332,8 +1271,6 @@ function App() {
             }
           </div>
         )}
-
-        {/* TASKS VIEW */}
         {view==="tasks"&&(
           <div className="slide-in">
             <div style={{marginBottom:20}}>
@@ -1354,8 +1291,6 @@ function App() {
             {filtered.length===0&&<div style={{textAlign:"center",padding:"60px 20px",opacity:0.3}}><div style={{fontSize:48,marginBottom:12}}>📭</div><div style={{fontSize:16,fontWeight:600}}>Geen taken gevonden</div></div>}
           </div>
         )}
-
-        {/* STATS */}
         <div style={{marginTop:24,display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
           {[
             {key:"all",label:"Totaal",value:tasks.filter(t=>t.weekMonday===currentMonday&&!t.isVirtual).length,icon:"📋",color:"#7c7cff"},
@@ -1370,16 +1305,10 @@ function App() {
           ))}
         </div>
       </div>
-
-      {/* FAB */}
       <button className="btn-pulse" onClick={()=>openModal(selectedDay)} style={{position:"fixed",bottom:"calc(28px + env(safe-area-inset-bottom))",right:24,background:`linear-gradient(135deg,${currentUser.color},${currentUser.color}bb)`,color:"#fff",border:"none",borderRadius:"50%",width:60,height:60,fontSize:28,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}}>+</button>
-
-      {/* TAAK MODAL */}
       {showModal&&(
         <Modal title={editingTask?"✏️ Taak wijzigen":"➕ Nieuwe taak"} onClose={closeTaskModal} maxWidth={500}>
             <input placeholder="Wat moet er gebeuren?" value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&saveTask()} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:"13px 15px",color:"#fff",fontSize:15,marginBottom:14,outline:"none"}}/>
-
-            {/* Voor wie */}
             <div style={{marginBottom:14}}>
               <label style={{fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:8}}>Voor wie</label>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -1387,8 +1316,6 @@ function App() {
                 {allUsers.map(u=>{const active=form.userIds.includes(u.id);return <button key={u.id} onClick={()=>setForm(f=>({...f,userIds:active?f.userIds.filter(id=>id!==u.id):[...f.userIds,u.id]}))} style={{background:active?u.color:"rgba(255,255,255,0.06)",color:"#fff",border:active?`1px solid ${u.color}`:"1px solid transparent",borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:700,cursor:"pointer",opacity:active?1:0.5}}>{u.username[0].toUpperCase()} {u.username}{active?" ✓":""}</button>;})}
               </div>
             </div>
-
-            {/* Team */}
             {myApprovedTeams.length>0&&(
               <div style={{marginBottom:14}}>
                 <label style={{fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:8}}>Koppel aan team (optioneel)</label>
@@ -1398,7 +1325,6 @@ function App() {
                 {form.teamIds.length>0&&<p style={{fontSize:11,opacity:0.35,marginTop:5}}>Alleen teamleden kunnen deze taak zien</p>}
               </div>
             )}
-
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
               <div>
                 <label style={{fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Tijdstip</label>
@@ -1413,8 +1339,6 @@ function App() {
                 </select>
               </div>
             </div>
-
-            {/* Herhaling */}
             <div style={{marginBottom:14}}>
               <label style={{fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>🔁 Herhaling</label>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -1424,26 +1348,19 @@ function App() {
               </div>
               {form.recurrenceType!=="none"&&<p style={{fontSize:11,opacity:0.35,marginTop:6}}>🔁 Wordt elke week opnieuw aangemaakt op basis van de gekozen dag</p>}
             </div>
-
-            {/* Label */}
             <div style={{marginBottom:14}}>
               <label style={{fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Label</label>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                 {categories.map(c=><button key={c.id} onClick={()=>setForm(f=>({...f,category:c.id}))} style={{background:form.category===c.id?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.05)",color:"#fff",border:form.category===c.id?"1px solid rgba(255,255,255,0.3)":"1px solid transparent",borderRadius:10,padding:"7px 11px",fontSize:12,fontWeight:600,cursor:"pointer"}}>{c.icon} {c.label}</button>)}
               </div>
             </div>
-
-            {/* Notities */}
             <div style={{marginBottom:18}}>
               <label style={{fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>📝 Notitie (optioneel)</label>
               <textarea placeholder="Extra informatie, aanwijzingen..." value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} rows={3} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:"12px 14px",color:"#fff",fontSize:13,outline:"none",resize:"vertical",fontFamily:"'DM Sans',sans-serif",lineHeight:1.5}}/>
             </div>
-
-            <button onClick={saveTask} disabled={saving} style={{width:"100%",padding:"15px",background:saving?"rgba(255,255,255,0.1)":`linear-gradient(135deg,${currentUser.color},${currentUser.color}bb)`,color:"#fff",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:saving?"not-allowed":"pointer"}}>{saving?"Opslaan...":editingTask?"Wijzigingen opslaan ✓":"Taak toevoegen 🚀"}</button>
+            <button onClick={saveTask} disabled={saving} style={{width:"100%",padding:"15px",background:saving?"rgba(255,255,255,0.1)":`linear-gradient(135deg,${currentUser.color},${currentUser.color}bb)`,color:"#fff",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:"pointer"}}>{saving?"Opslaan...":editingTask?"Wijzigingen opslaan ✓":"Taak toevoegen 🚀"}</button>
         </Modal>
       )}
-
-      {/* LABEL MANAGER */}
       {showLabelManager&&(
         <Modal title="🏷️ Labels beheren" onClose={()=>setShowLabelManager(false)} maxWidth={500}>
             <p style={{fontSize:12,opacity:0.4,marginBottom:18}}>Maak je eigen labels aan</p>
