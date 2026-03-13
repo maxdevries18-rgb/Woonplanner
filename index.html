@@ -382,7 +382,7 @@ function StatistiekenScherm({onClose,allUsers,allTeams,myTeamIds}) {
 }
 
 // ── Boodschappenlijst ─────────────────────────────────────────────────────────
-function BoodschappenScherm({onClose,currentUser,myTeamIds,allTeams,showNotif}) {
+function BoodschappenScherm({onClose,currentUser,myTeamIds,allTeams,showNotif,isView=false}) {
   const [items,setItems]=useState([]);
   const [loading,setLoading]=useState(true);
   const [newName,setNewName]=useState("");
@@ -429,6 +429,7 @@ function BoodschappenScherm({onClose,currentUser,myTeamIds,allTeams,showNotif}) 
   }
 
   function exportToWhatsApp(){
+    const open=items.filter(i=>!i.checked);
     if(!open.length) return;
     const teamName = filterTeam ? myTeams.find(t=>t.id===filterTeam)?.name : "Persoonlijk";
     let text = `🛒 *Boodschappenlijst (${teamName})*\n\n`;
@@ -442,21 +443,8 @@ function BoodschappenScherm({onClose,currentUser,myTeamIds,allTeams,showNotif}) 
   const open=items.filter(i=>!i.checked);
   const gedaan=items.filter(i=>i.checked);
 
-  return (
-    <Modal 
-      title={
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <span>🛒 Boodschappenlijst</span>
-          {open.length>0 && (
-            <button onClick={exportToWhatsApp} style={{background:"rgba(37,211,102,0.15)",border:"1px solid rgba(37,211,102,0.3)",borderRadius:8,padding:"4px 10px",color:"#25D366",fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-              <span style={{fontSize:14}}>📲</span> Deel
-            </button>
-          )}
-        </div>
-      } 
-      onClose={onClose} 
-      maxWidth={500}
-    >
+  const content = (
+    <>
         {myTeams.length>0&&(
           <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
             <button onClick={()=>setFilterTeam(null)} style={{background:filterTeam===null?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.05)",border:filterTeam===null?"1px solid rgba(255,255,255,0.25)":"1px solid transparent",borderRadius:20,padding:"5px 12px",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>👤 Persoonlijk</button>
@@ -512,9 +500,45 @@ function BoodschappenScherm({onClose,currentUser,myTeamIds,allTeams,showNotif}) 
             )}
           </div>
         )}
+    </>
+  );
+
+  if(isView){
+    return (
+      <div className="slide-in" style={{maxWidth:600,margin:"0 auto"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <h2 style={{fontSize:20,fontWeight:900,fontFamily:"'Space Mono',monospace"}}>🛒 Boodschappen</h2>
+          {open.length>0 && (
+            <button onClick={exportToWhatsApp} style={{background:"rgba(37,211,102,0.15)",border:"1px solid rgba(37,211,102,0.3)",borderRadius:8,padding:"6px 12px",color:"#25D366",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:16}}>📲</span> WhatsApp
+            </button>
+          )}
+        </div>
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <Modal 
+      title={
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <span>🛒 Boodschappenlijst</span>
+          {open.length>0 && (
+            <button onClick={exportToWhatsApp} style={{background:"rgba(37,211,102,0.15)",border:"1px solid rgba(37,211,102,0.3)",borderRadius:8,padding:"4px 10px",color:"#25D366",fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+              <span style={{fontSize:14}}>📲</span> Deel
+            </button>
+          )}
+        </div>
+      } 
+      onClose={onClose} 
+      maxWidth={500}
+    >
+        {content}
     </Modal>
   );
 }
+
 
 // ── Login ─────────────────────────────────────────────────────────────────────
 function LoginScreen({onLogin}) {
@@ -942,7 +966,6 @@ function App() {
   const [showBeheer,setShowBeheer]=useState(false);
   const [beheerTab,setBeheerTab]=useState("teams");
   const [showStats,setShowStats]=useState(false);
-  const [showBoodschappen,setShowBoodschappen]=useState(false);
   const [notification,setNotification]=useState(null);
   const [filterUser,setFilterUser]=useState("all");
   const [filterTeam,setFilterTeam]=useState("all");
@@ -1163,13 +1186,12 @@ function App() {
         else if (showMenu) setShowMenu(false);
         else if (showBeheer) setShowBeheer(false);
         else if (showStats) setShowStats(false);
-        else if (showBoodschappen) setShowBoodschappen(false);
         else if (showLabelManager) setShowLabelManager(false);
       }
     };
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
-  }, [showModal, showMenu, showBeheer, showStats, showBoodschappen, showLabelManager, closeTaskModal]);
+  }, [showModal, showMenu, showBeheer, showStats, showLabelManager, closeTaskModal]);
 
   if(loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><div className="spinner"/></div>;
   if(!currentUser) return <LoginScreen onLogin={u=>setCurrentUser(u)}/>;
@@ -1193,13 +1215,12 @@ function App() {
         onOpenBeheer={(tab)=>{setBeheerTab(tab);setShowBeheer(true);}}
         onOpenLabels={()=>setShowLabelManager(true)}
         onOpenStats={()=>setShowStats(true)}
-        onOpenBoodschappen={()=>setShowBoodschappen(true)}
+        onOpenBoodschappen={()=>setView("boodschappen")}
         onWissel={()=>{localStorage.removeItem("woonplanner_user_id");setCurrentUser(null);}}
         onClose={()=>setShowMenu(false)}
       />}
       {showBeheer&&<BeheerScherm currentUser={currentUser} initialTab={beheerTab} onClose={()=>{setShowBeheer(false);loadAll();}} showNotif={showNotif}/>}
       {showStats&&<StatistiekenScherm onClose={()=>setShowStats(false)} allUsers={allUsers} allTeams={allTeams} myTeamIds={myTeamIds}/>}
-      {showBoodschappen&&<BoodschappenScherm onClose={()=>setShowBoodschappen(false)} currentUser={currentUser} myTeamIds={myTeamIds} allTeams={allTeams} showNotif={showNotif}/>}
       <div style={{paddingTop:"calc(14px + env(safe-area-inset-top))",paddingBottom:10,paddingLeft:16,paddingRight:16,background:theme.color+"f7",borderBottom:"1px solid rgba(255,255,255,0.06)",backdropFilter:"blur(10px)",position:"sticky",top:0,zIndex:100}}>
         <div style={{maxWidth:900,margin:"0 auto"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8}}>
@@ -1226,7 +1247,7 @@ function App() {
           </div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             <div style={{display:"flex",gap:3,background:"rgba(255,255,255,0.05)",borderRadius:12,padding:3}}>
-              {[{id:"week",label:"📅 Week"},{id:"day",label:"🌤 Dag"},{id:"tasks",label:"📋 Taken"}].map(v=>(
+              {[{id:"week",label:"📅 Week"},{id:"day",label:"🌤 Dag"},{id:"tasks",label:"📋 Taken"},{id:"boodschappen",label:"🛒 Lijst"}].map(v=>(
                 <button key={v.id} onClick={()=>setView(v.id)} style={{background:view===v.id?"rgba(255,255,255,0.15)":"transparent",color:view===v.id?"#fff":"rgba(255,255,255,0.5)",border:"none",borderRadius:8,padding:"5px 13px",fontSize:12,fontWeight:600,cursor:"pointer"}}>{v.label}</button>
               ))}
             </div>
@@ -1314,6 +1335,9 @@ function App() {
             })}
             {filtered.length===0&&<div style={{textAlign:"center",padding:"60px 20px",opacity:0.3}}><div style={{fontSize:48,marginBottom:12}}>📭</div><div style={{fontSize:16,fontWeight:600}}>Geen taken gevonden</div></div>}
           </div>
+        )}
+        {view==="boodschappen"&&(
+          <BoodschappenScherm currentUser={currentUser} myTeamIds={myTeamIds} allTeams={allTeams} showNotif={showNotif} isView={true}/>
         )}
         <div style={{marginTop:24,display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
           {[
