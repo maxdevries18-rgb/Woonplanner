@@ -189,6 +189,21 @@ function Toggle({value,onChange}) {
   return <button className={`toggle${value?" on":""}`} onClick={()=>onChange(!value)} />;
 }
 
+// ── UI Components ─────────────────────────────────────────────────────────────
+function Modal({ title, children, onClose, maxWidth = 500 }) {
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:600,backdropFilter:"blur(4px)"}}>
+      <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"var(--panel-bg)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",width:"100%",maxWidth,maxHeight:"92vh",overflowY:"auto",fontFamily:"'DM Sans',sans-serif"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+          <h3 style={{fontSize:18,fontWeight:900,color:"#f0f0f0",fontFamily:"'Space Mono',monospace"}}>{title}</h3>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:13}}>✕ Sluiten</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 // ── Hamburger Menu ─────────────────────────────────────────────────────────────
 function HamburgerMenu({currentUser,pendingCount,theme,onThemeChange,onOpenBeheer,onOpenLabels,onOpenStats,onOpenBoodschappen,onWissel,onClose}) {
   const menuItems = [
@@ -315,13 +330,7 @@ function StatistiekenScherm({onClose,allUsers,allTeams,myTeamIds}) {
   const periodes=[{k:"week",l:"Week"},{k:"maand",l:"Maand"},{k:"kwartaal",l:"Kwartaal"},{k:"jaar",l:"Jaar"}];
 
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:600,backdropFilter:"blur(4px)"}}>
-      <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"var(--panel-bg)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",width:"100%",maxWidth:580,maxHeight:"92vh",overflowY:"auto",fontFamily:"'DM Sans',sans-serif"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-          <h3 style={{fontSize:20,fontWeight:900,color:"#f0f0f0",fontFamily:"'Space Mono',monospace"}}>📊 Statistieken</h3>
-          <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:13}}>✕</button>
-        </div>
-
+    <Modal title="📊 Statistieken" onClose={onClose} maxWidth={580}>
         {/* Periode selector */}
         <div style={{display:"flex",gap:6,marginBottom:20,background:"rgba(255,255,255,0.04)",borderRadius:12,padding:4}}>
           {periodes.map(p=>(
@@ -389,8 +398,7 @@ function StatistiekenScherm({onClose,allUsers,allTeams,myTeamIds}) {
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -445,13 +453,7 @@ function BoodschappenScherm({onClose,currentUser,myTeamIds,allTeams,showNotif}) 
   const gedaan=items.filter(i=>i.checked);
 
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:600,backdropFilter:"blur(4px)"}}>
-      <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"var(--panel-bg)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto",fontFamily:"'DM Sans',sans-serif"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <h3 style={{fontSize:20,fontWeight:900,color:"#f0f0f0",fontFamily:"'Space Mono',monospace"}}>🛒 Boodschappenlijst</h3>
-          <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:13}}>✕</button>
-        </div>
-
+    <Modal title="🛒 Boodschappenlijst" onClose={onClose} maxWidth={500}>
         {/* Team selector */}
         {myTeams.length>0&&(
           <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
@@ -516,8 +518,7 @@ function BoodschappenScherm({onClose,currentUser,myTeamIds,allTeams,showNotif}) 
             )}
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -697,12 +698,7 @@ function BeheerScherm({currentUser,onClose,showNotif,initialTab}) {
   const sLabel={fontSize:11,fontWeight:700,opacity:0.5,letterSpacing:1,textTransform:"uppercase",marginBottom:10,display:"block"};
 
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:600,backdropFilter:"blur(4px)"}}>
-      <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"var(--panel-bg)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 24px 48px",width:"100%",maxWidth:560,maxHeight:"92vh",overflowY:"auto",fontFamily:"'DM Sans',sans-serif"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <h3 style={{fontSize:20,fontWeight:900,color:"#f0f0f0",fontFamily:"'Space Mono',monospace"}}>⚙️ Beheer</h3>
-          <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:13}}>✕ Sluiten</button>
-        </div>
+    <Modal title="⚙️ Beheer" onClose={onClose} maxWidth={560}>
         <div style={{display:"flex",gap:6,marginBottom:20,background:"rgba(255,255,255,0.04)",borderRadius:12,padding:4}}>
           <button style={hBtnStyle(tab==="teams")} onClick={()=>setTab("teams")}>
             👥 Teams {allPendingRequests.length>0&&<span style={{background:"#FF6B6B",color:"#fff",borderRadius:20,padding:"1px 6px",fontSize:10,marginLeft:4}}>{allPendingRequests.length}</span>}
@@ -889,8 +885,7 @@ function BeheerScherm({currentUser,onClose,showNotif,initialTab}) {
             ))}
           </div>
         )}
-      </div>
-    </div>
+      </Modal>
   );
 }
 
@@ -976,6 +971,7 @@ function App() {
   const [holidays,setHolidays]=useState({});
   const [pendingCount,setPendingCount]=useState(0);
   const [theme,setTheme]=useState(()=>{try{const s=localStorage.getItem("woonplanner_theme");return s?JSON.parse(s):THEME_COLORS[0];}catch(e){return THEME_COLORS[0];}});
+  const [searchQuery,setSearchQuery]=useState("");
 
   useEffect(()=>{
     document.documentElement.style.setProperty("--bg-color", theme.color);
@@ -1088,8 +1084,9 @@ function App() {
     const matchDone=filterDone==="all"||(filterDone==="done"&&t.done)||(filterDone==="open"&&!t.done);
     const matchUser=filterUser==="all"||t.userIds===null||(t.userIds||[]).includes(parseInt(filterUser));
     const matchTeam=filterTeam==="all"?true:(t.teamIds||[]).includes(parseInt(filterTeam));
-    return matchWeek&&matchDone&&matchUser&&matchTeam;
-  }),[tasks,currentMonday,filterDone,filterUser,filterTeam]);
+    const matchSearch=searchQuery.trim()===""||t.title.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchWeek&&matchDone&&matchUser&&matchTeam&&matchSearch;
+  }),[tasks,currentMonday,filterDone,filterUser,filterTeam,searchQuery]);
 
   function showNotif(title,body){setNotification({title,body});setTimeout(()=>setNotification(null),3000);}
 
@@ -1327,7 +1324,11 @@ function App() {
             {holidayFor(weekDates[selectedDay])&&<div style={{background:"rgba(255,211,61,0.12)",border:"1px solid rgba(255,211,61,0.3)",borderRadius:10,padding:"7px 14px",marginBottom:14,display:"inline-flex",alignItems:"center",gap:8}}><span>🎉</span><span style={{color:"#FFD93D",fontWeight:700,fontSize:13}}>{holidayFor(weekDates[selectedDay])}</span></div>}
             {tasksByDay(selectedDay).length===0
               ?<div style={{textAlign:"center",padding:"60px 20px",opacity:0.3}}><div style={{fontSize:48,marginBottom:12}}>😴</div><div style={{fontSize:16,fontWeight:600}}>Niks gepland!</div></div>
-              :<div style={{display:"flex",flexDirection:"column",gap:10}}>{tasksByDay(selectedDay).sort((a,b)=>a.deadline.localeCompare(b.deadline)).map(t=><TaskCard key={t.id} task={t} onToggle={toggleDone} onDelete={deleteTask} onEdit={openEditModal} categories={categories} allUsers={allUsers} allTeams={allTeams} currentUser={currentUser}/>)}</div>
+              :<div style={{display:"flex",flexDirection:"column",gap:10}}>{tasksByDay(selectedDay).sort((a,b)=>{
+                  if(a.deadline==="hele_dag"&&b.deadline!=="hele_dag") return -1;
+                  if(a.deadline!=="hele_dag"&&b.deadline==="hele_dag") return 1;
+                  return a.deadline.localeCompare(b.deadline);
+                }).map(t=><TaskCard key={t.id} task={t} onToggle={toggleDone} onDelete={deleteTask} onEdit={openEditModal} categories={categories} allUsers={allUsers} allTeams={allTeams} currentUser={currentUser}/>)}</div>
             }
           </div>
         )}
@@ -1335,6 +1336,9 @@ function App() {
         {/* TASKS VIEW */}
         {view==="tasks"&&(
           <div className="slide-in">
+            <div style={{marginBottom:20}}>
+              <input placeholder="🔍 Zoek op taaktitel..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:14,padding:"13px 18px",color:"#fff",fontSize:14,outline:"none"}}/>
+            </div>
             {categories.map(c=>{
               const ct=filtered.filter(t=>t.category===c.id);
               if(!ct.length) return null;
@@ -1372,12 +1376,7 @@ function App() {
 
       {/* TAAK MODAL */}
       {showModal&&(
-        <div onClick={closeTaskModal} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:500,backdropFilter:"blur(4px)"}}>
-          <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"var(--panel-bg)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-              <h3 style={{fontSize:17,fontWeight:900,color:"#f0f0f0",fontFamily:"'Space Mono',monospace"}}>{editingTask?"✏️ Taak wijzigen":"➕ Nieuwe taak"}</h3>
-              <button onClick={closeTaskModal} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:13}}>✕ Sluiten</button>
-            </div>
+        <Modal title={editingTask?"✏️ Taak wijzigen":"➕ Nieuwe taak"} onClose={closeTaskModal} maxWidth={500}>
             <input placeholder="Wat moet er gebeuren?" value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&saveTask()} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:"13px 15px",color:"#fff",fontSize:15,marginBottom:14,outline:"none"}}/>
 
             {/* Voor wie */}
@@ -1441,15 +1440,12 @@ function App() {
             </div>
 
             <button onClick={saveTask} disabled={saving} style={{width:"100%",padding:"15px",background:saving?"rgba(255,255,255,0.1)":`linear-gradient(135deg,${currentUser.color},${currentUser.color}bb)`,color:"#fff",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:saving?"not-allowed":"pointer"}}>{saving?"Opslaan...":editingTask?"Wijzigingen opslaan ✓":"Taak toevoegen 🚀"}</button>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* LABEL MANAGER */}
       {showLabelManager&&(
-        <div onClick={()=>setShowLabelManager(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:500,backdropFilter:"blur(4px)"}}>
-          <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"var(--panel-bg)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",width:"100%",maxWidth:500,maxHeight:"90vh",overflowY:"auto"}}>
-            <h3 style={{fontSize:18,fontWeight:900,marginBottom:4,color:"#f0f0f0",fontFamily:"'Space Mono',monospace"}}>🏷️ Labels beheren</h3>
+        <Modal title="🏷️ Labels beheren" onClose={()=>setShowLabelManager(false)} maxWidth={500}>
             <p style={{fontSize:12,opacity:0.4,marginBottom:18}}>Maak je eigen labels aan</p>
             <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
               {categories.map(c=>(
@@ -1466,8 +1462,7 @@ function App() {
               </div>
               <button onClick={addLabel} style={{width:"100%",padding:"13px",background:"linear-gradient(135deg,#4ECDC4,#2ecc71)",color:"#fff",border:"none",borderRadius:12,fontSize:14,fontWeight:800,cursor:"pointer"}}>+ Label toevoegen</button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
