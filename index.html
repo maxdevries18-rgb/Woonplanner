@@ -428,11 +428,35 @@ function BoodschappenScherm({onClose,currentUser,myTeamIds,allTeams,showNotif}) 
     showNotif("🗑️ Afgevinkte items verwijderd","");
   }
 
+  function exportToWhatsApp(){
+    if(!open.length) return;
+    const teamName = filterTeam ? myTeams.find(t=>t.id===filterTeam)?.name : "Persoonlijk";
+    let text = `🛒 *Boodschappenlijst (${teamName})*\n\n`;
+    open.forEach(i => {
+      text += `• ${i.name}${i.quantity ? ` (${i.quantity})` : ""}\n`;
+    });
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, "_blank");
+  }
+
   const open=items.filter(i=>!i.checked);
   const gedaan=items.filter(i=>i.checked);
 
   return (
-    <Modal title="🛒 Boodschappenlijst" onClose={onClose} maxWidth={500}>
+    <Modal 
+      title={
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <span>🛒 Boodschappenlijst</span>
+          {open.length>0 && (
+            <button onClick={exportToWhatsApp} style={{background:"rgba(37,211,102,0.15)",border:"1px solid rgba(37,211,102,0.3)",borderRadius:8,padding:"4px 10px",color:"#25D366",fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+              <span style={{fontSize:14}}>📲</span> Deel
+            </button>
+          )}
+        </div>
+      } 
+      onClose={onClose} 
+      maxWidth={500}
+    >
         {myTeams.length>0&&(
           <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
             <button onClick={()=>setFilterTeam(null)} style={{background:filterTeam===null?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.05)",border:filterTeam===null?"1px solid rgba(255,255,255,0.25)":"1px solid transparent",borderRadius:20,padding:"5px 12px",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>👤 Persoonlijk</button>
