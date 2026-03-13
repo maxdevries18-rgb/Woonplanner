@@ -1169,6 +1169,29 @@ function App() {
   function deleteLabel(id){setCategories(prev=>prev.filter(c=>c.id!==id));}
   function tasksByDay(i){return filtered.filter(t=>t.dayIndex===i);}
 
+  const closeTaskModal = useCallback(() => {
+    if (form.title.trim() && !window.confirm("Je hebt nog onopgeslagen tekst. Weet je zeker dat je wilt sluiten?")) {
+      return;
+    }
+    setShowModal(false);
+    setEditingTask(null);
+  }, [form.title]);
+
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === "Escape") {
+        if (showModal) closeTaskModal();
+        else if (showMenu) setShowMenu(false);
+        else if (showBeheer) setShowBeheer(false);
+        else if (showStats) setShowStats(false);
+        else if (showBoodschappen) setShowBoodschappen(false);
+        else if (showLabelManager) setShowLabelManager(false);
+      }
+    };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [showModal, showMenu, showBeheer, showStats, showBoodschappen, showLabelManager, closeTaskModal]);
+
   if(loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><div className="spinner"/></div>;
   if(!currentUser) return <LoginScreen onLogin={u=>setCurrentUser(u)}/>;
   if(appError) return (
@@ -1349,11 +1372,11 @@ function App() {
 
       {/* TAAK MODAL */}
       {showModal&&(
-        <div onClick={()=>{setShowModal(false);setEditingTask(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:500,backdropFilter:"blur(4px)"}}>
+        <div onClick={closeTaskModal} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:500,backdropFilter:"blur(4px)"}}>
           <div className="slide-in" onClick={e=>e.stopPropagation()} style={{background:"var(--panel-bg)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
               <h3 style={{fontSize:17,fontWeight:900,color:"#f0f0f0",fontFamily:"'Space Mono',monospace"}}>{editingTask?"✏️ Taak wijzigen":"➕ Nieuwe taak"}</h3>
-              <button onClick={()=>{setShowModal(false);setEditingTask(null);}} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:13}}>✕ Sluiten</button>
+              <button onClick={closeTaskModal} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",cursor:"pointer",fontSize:13}}>✕ Sluiten</button>
             </div>
             <input placeholder="Wat moet er gebeuren?" value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&saveTask()} style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:"13px 15px",color:"#fff",fontSize:15,marginBottom:14,outline:"none"}}/>
 
