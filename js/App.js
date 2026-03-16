@@ -196,11 +196,21 @@ function App() {
   }
 
   async function deleteTask(id){
-    if(String(id).startsWith("rec_")) return showNotif("ℹ️ Tip","Bewerk de originele taak om herhaling te stoppen");
-    setTasks(prev=>prev.filter(t=>t.id!==id));
+    let targetId = id;
+    if(String(id).startsWith("rec_")){
+      const vTask=tasks.find(t=>t.id===id);
+      if(vTask && vTask.originalId) {
+        if(!window.confirm("Wil je de hele reeks van deze herhalende taak verwijderen?")) return;
+        targetId = vTask.originalId;
+      }
+    }
+    
+    setTasks(prev=>prev.filter(t=>t.id!==id && t.originalId!==targetId));
     try{
-      await supabase.from("task_teams").delete().eq("task_id",id);
-      await supabase.from("tasks").delete().eq("id",id);
+      await supabase.from("task_teams").delete().eq("task_id",targetId);
+      await supabase.from("tasks").delete().eq("id",targetId);
+      showNotif("🗑️ Taak (en reeks) verwijderd","");
+      await loadAll();
     }catch(e){showNotif("❌ Mislukt","");loadAll();}
   }
 
@@ -211,8 +221,32 @@ function App() {
     setShowModal(true);
   }
   function openEditModal(task){
-    setEditingTask(task);
-    setForm({title:task.title,userIds:task.userIds||[],teamIds:task.teamIds||[],category:task.category,dayIndex:task.dayIndex,deadline:task.deadline||"hele_dag",notes:task.notes||"",recurrenceType:task.recurrenceType||"none",recurrenceDay:task.recurrenceDay});
+    // Als het een virtuele taak is, bewerk het origineel
+    let taskToEdit = task;
+    if(task.isVirtual && task.originalId){
+      const original = tasks.find(t => t.id === task.originalId);
+      if(original) {
+        taskToEdit = original;
+      } else {
+        // Als het origineel niet in de huidige lijst staat (bijv. andere week),
+        // moeten we het eigenlijk ophalen, maar we kunnen ook de data van de virtuele taak gebruiken
+        // met het originele ID.
+        taskToEdit = {...task, id: task.originalId, isVirtual: false};
+      }
+    }
+    
+    setEditingTask(taskToEdit);
+    setForm({
+      title:taskToEdit.title,
+      userIds:taskToEdit.userIds||[],
+      teamIds:taskToEdit.teamIds||[],
+      category:taskToEdit.category,
+      dayIndex:taskToEdit.dayIndex,
+      deadline:taskToEdit.deadline||"hele_dag",
+      notes:taskToEdit.notes||"",
+      recurrenceType:taskToEdit.recurrenceType||"none",
+      recurrenceDay:taskToEdit.recurrenceDay
+    });
     setShowModal(true);
   }
   function addLabel(){if(!newLabel.label.trim())return;setCategories(prev=>[...prev,{id:"custom_"+Date.now(),label:newLabel.label.trim(),icon:newLabel.icon}]);setNewLabel({label:"",icon:"🏷️"});}
