@@ -21,11 +21,19 @@ function TaskCard({task,onToggle,onDelete,onEdit,showDay,categories,allUsers,all
             {task.notes&&<button onClick={()=>setShowNotes(s=>!s)} style={{fontSize:11,background:"rgba(255,255,255,0.08)",border:"none",borderRadius:6,padding:"1px 7px",color:"rgba(255,255,255,0.5)",cursor:"pointer"}}>{showNotes?"▲":"📝"}</button>}
           </div>
           {confirmDelete?(
-            <div style={{display:"flex",gap:6,marginTop:6}}>
-              <button onClick={()=>onDelete(task.id)} style={{background:"rgba(255,80,80,0.25)",border:"1px solid rgba(255,80,80,0.4)",borderRadius:8,padding:"4px 12px",color:"#FF6B6B",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                {task.isVirtual ? "Hele reeks verwijderen" : "Ja, verwijder"}
-              </button>
-              <button onClick={()=>setConfirmDelete(false)} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"4px 12px",color:"rgba(255,255,255,0.5)",fontSize:12,fontWeight:700,cursor:"pointer"}}>Annuleer</button>
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:8}}>
+              <p style={{fontSize:12,fontWeight:700,color:"#FF6B6B"}}>Weet je het zeker?</p>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {task.isVirtual ? (
+                  <>
+                    <button onClick={()=>onDelete(task.id, "only")} style={{background:"rgba(255,80,80,0.2)",border:"1px solid rgba(255,80,80,0.3)",borderRadius:8,padding:"6px 12px",color:"#FF6B6B",fontSize:11,fontWeight:800,cursor:"pointer"}}>Alleen deze</button>
+                    <button onClick={()=>onDelete(task.id, "series")} style={{background:"#FF6B6B",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>Hele reeks</button>
+                  </>
+                ) : (
+                  <button onClick={()=>onDelete(task.id)} style={{background:"#FF6B6B",border:"none",borderRadius:8,padding:"6px 12px",color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>Ja, verwijder</button>
+                )}
+                <button onClick={()=>setConfirmDelete(false)} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"6px 12px",color:"rgba(255,255,255,0.5)",fontSize:11,fontWeight:700,cursor:"pointer"}}>Annuleer</button>
+              </div>
             </div>
           ):(
             <div style={{display:"flex",gap:5,marginTop:4,flexWrap:"wrap",alignItems:"center"}}>
@@ -40,7 +48,7 @@ function TaskCard({task,onToggle,onDelete,onEdit,showDay,categories,allUsers,all
         {!confirmDelete&&(
           <div style={{display:"flex",gap:6,flexShrink:0}}>
             {canEdit&&<button onClick={()=>onEdit(task)} title={task.isVirtual?"Origineel bewerken":"Bewerken"} style={{background:"rgba(255,255,255,0.05)",border:"none",borderRadius:8,padding:"6px 8px",cursor:"pointer",color:task.isVirtual?"#FFD93D":"rgba(255,255,255,0.3)",fontSize:13}}>{task.isVirtual?"🔁 ✏️":"✏️"}</button>}
-            {canDelete&&<button onClick={()=>setConfirmDelete(true)} title={task.isVirtual?"Reeks verwijderen":"Verwijderen"} style={{background:"rgba(255,255,255,0.05)",border:"none",borderRadius:8,padding:"6px 8px",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:14}}>✕</button>}
+            {canDelete&&<button onClick={()=>setConfirmDelete(true)} title={task.isVirtual?"Verwijderen":"Verwijderen"} style={{background:"rgba(255,255,255,0.05)",border:"none",borderRadius:8,padding:"6px 8px",cursor:"pointer",color:"rgba(255,255,255,0.3)",fontSize:14}}>✕</button>}
           </div>
         )}
       </div>

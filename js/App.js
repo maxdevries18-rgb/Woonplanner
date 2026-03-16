@@ -69,16 +69,24 @@ function App() {
       if(me) setCurrentUser(me);
       const map={};
       (r5.data||[]).forEach(tt=>{if(!map[tt.task_id])map[tt.task_id]=[];map[tt.task_id].push(tt.team_id);});
-      const allNorm=(r4.data||[]).filter(t=>{
-        const tTeams=map[t.id]||[];
-        if(tTeams.length>0) return tTeams.some(tid=>myIds.includes(tid));
-        return true;
-      }).map(t=>normalizeTask(t,map[t.id]||[]));
+      
+      const allNormRaw=(r4.data||[]).map(t=>normalizeTask(t,map[t.id]||[]));
+      
+      // Filter tombstone records (uitzonderingen voor herhalende taken)
+      const allNorm = allNormRaw.filter(t => t.recurrenceType !== "exception");
+      const exceptions = allNormRaw.filter(t => t.recurrenceType === "exception");
 
       const recurring=allNorm.filter(t=>t.recurrenceType&&t.recurrenceType!=="none");
       const virtual=[];
       recurring.forEach(t=>{
         if(recurringTaskBelongsToWeek(t,currentMonday)){
+          // Check of er al een 'echte' instantie of een uitzondering voor deze week bestaat
+          const hasInstance = allNormRaw.some(real => 
+            real.weekMonday === currentMonday && 
+            real.notes && real.notes.startsWith(`RID:${t.id}`)
+          );
+          if(hasInstance) return;
+
           let di=t.dayIndex;
           if(t.recurrenceType==="monthly"||t.recurrenceType==="monthly_last"){
             for(let i=0;i<7;i++){
@@ -93,7 +101,17 @@ function App() {
           virtual.push({...t,id:`rec_${t.id}_${currentMonday}`,weekMonday:currentMonday,dayIndex:di,done:false,isVirtual:true,originalId:t.id});
         }
       });
-      setTasks([...allNorm,...virtual]);
+      
+      // Filter de lijst met 'echte' taken zodat de originele herhaal-taak (die in de verleden tijd staat) 
+      // niet in de huidige week verschijnt als die week anders is.
+      const tasksToShow = allNorm.filter(t => {
+        if(t.isRecurring && t.weekMonday !== currentMonday) return false;
+        const tTeams=map[t.id]||[];
+        if(tTeams.length>0) return tTeams.some(tid=>myIds.includes(tid));
+        return true;
+      });
+
+      setTasks([...tasksToShow,...virtual]);
       setAppError(null);
     }catch(e){setAppError("Verbinding mislukt");}
   },[currentUser?.id,currentMonday]);
@@ -184,7 +202,7 @@ function App() {
       const vTask=tasks.find(t=>t.id===id);
       if(!vTask) return;
       const user_id=vTask.userIds===null?null:vTask.userIds.join(",");
-      const {data,error}=await supabase.from("tasks").insert([{title:vTask.title,user_id,category:vTask.category,day_index:vTask.dayIndex,done:true,deadline:vTask.deadline||"",week_monday:currentMonday,notes:vTask.notes||""}]).select().single();
+      const {data,error}=await supabase.from("tasks").insert([{title:vTask.title,user_id,category:vTask.category,day_index:vTask.dayIndex,done:true,deadline:vTask.deadline||"",week_monday:currentMonday,notes:`RID:${vTask.originalId} ${vTask.notes||""}`}]).select().single();
       if(!error){await loadAll();showNotif("✅ Afgevinkt!","");}
       return;
     }
@@ -195,21 +213,48 @@ function App() {
     }catch(e){setTasks(prev=>prev.map(t=>t.id===id?{...t,done:cur}:t));}
   }
 
-  async function deleteTask(id){
-    let targetId = id;
+  async function deleteTask(id, scope = "only"){
     if(String(id).startsWith("rec_")){
       const vTask=tasks.find(t=>t.id===id);
       if(vTask && vTask.originalId) {
-        if(!window.confirm("Wil je de hele reeks van deze herhalende taak verwijderen?")) return;
-        targetId = vTask.originalId;
+        if(scope === "series") {
+          // Hele reeks verwijderen (origineel verwijderen)
+          setTasks(prev=>prev.filter(t=>t.id!==id && t.originalId!==vTask.originalId));
+          try{
+            await supabase.from("task_teams").delete().eq("task_id",vTask.originalId);
+            await supabase.from("tasks").delete().eq("id",vTask.originalId);
+            showNotif("🗑️ Hele reeks verwijderd","");
+            await loadAll();
+          }catch(e){showNotif("❌ Mislukt","");loadAll();}
+        } else {
+          // Alleen deze instantie verwijderen (tombstone record aanmaken)
+          try{
+            const user_id=vTask.userIds===null?null:vTask.userIds.join(",");
+            await supabase.from("tasks").insert([{
+              title: vTask.title,
+              user_id,
+              category: vTask.category,
+              day_index: vTask.dayIndex,
+              deadline: vTask.deadline||"",
+              week_monday: currentMonday,
+              done: false,
+              recurrence_type: "exception", // Speciale marker voor een 'verwijderde' herhaling
+              notes: `RID:${vTask.originalId} ${vTask.notes||""}`
+            }]);
+            showNotif("🗑️ Alleen deze instantie verwijderd","");
+            await loadAll();
+          }catch(e){showNotif("❌ Mislukt","");}
+        }
       }
+      return;
     }
     
-    setTasks(prev=>prev.filter(t=>t.id!==id && t.originalId!==targetId));
+    // Normale taak verwijderen
+    setTasks(prev=>prev.filter(t=>t.id!==id));
     try{
-      await supabase.from("task_teams").delete().eq("task_id",targetId);
-      await supabase.from("tasks").delete().eq("id",targetId);
-      showNotif("🗑️ Taak (en reeks) verwijderd","");
+      await supabase.from("task_teams").delete().eq("task_id",id);
+      await supabase.from("tasks").delete().eq("id",id);
+      showNotif("🗑️ Taak verwijderd","");
       await loadAll();
     }catch(e){showNotif("❌ Mislukt","");loadAll();}
   }
@@ -228,9 +273,6 @@ function App() {
       if(original) {
         taskToEdit = original;
       } else {
-        // Als het origineel niet in de huidige lijst staat (bijv. andere week),
-        // moeten we het eigenlijk ophalen, maar we kunnen ook de data van de virtuele taak gebruiken
-        // met het originele ID.
         taskToEdit = {...task, id: task.originalId, isVirtual: false};
       }
     }
