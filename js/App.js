@@ -516,13 +516,13 @@ function App() {
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
               <div>
                 <label style={{fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Tijdstip</label>
-                <select value={form.deadline} onChange={e=>setForm(f=>({...f,deadline:e.target.value}))} style={{width:"100%",background:"#2a2a5a",border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,padding:"9px 11px",color:"#fff",fontSize:13,outline:"none",cursor:"pointer"}}>
+                <select value={form.deadline} onChange={e=>setForm(f=>({...f,deadline:e.target.value}))} style={{width:"100%",background:"#2a2a5a",border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,padding:"9px 11px",color:"#fff",fontSize:16,outline:"none",cursor:"pointer"}}>
                   {TIME_OPTIONS.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
               <div>
                 <label style={{fontSize:10,opacity:0.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Dag</label>
-                <select value={form.dayIndex} onChange={e=>setForm(f=>({...f,dayIndex:parseInt(e.target.value)}))} style={{width:"100%",background:"#2a2a5a",border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,padding:"9px 11px",color:"#fff",fontSize:13,outline:"none",cursor:"pointer"}}>
+                <select value={form.dayIndex} onChange={e=>setForm(f=>({...f,dayIndex:parseInt(e.target.value)}))} style={{width:"100%",background:"#2a2a5a",border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,padding:"9px 11px",color:"#fff",fontSize:16,outline:"none",cursor:"pointer"}}>
                   {DAYS.map((d,i)=><option key={i} value={i}>{d} {weekDates[i].getDate()}</option>)}
                 </select>
               </div>
@@ -536,14 +536,14 @@ function App() {
               </div>
               {form.recurrenceType!=="none" && (
                 <div style={{background:"rgba(255,255,255,0.05)",borderRadius:12,padding:12,border:"1px solid rgba(255,255,255,0.08)"}}>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:10}}>
                     <div>
                       <label style={{fontSize:9,opacity:0.4,fontWeight:700,textTransform:"uppercase",display:"block",marginBottom:4}}>Tot datum (optioneel)</label>
-                      <input type="date" value={form.recurrenceEndDate} onChange={e=>setForm(f=>({...f,recurrenceEndDate:e.target.value}))} style={{width:"100%",background:"#2a2a5a",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,padding:"7px 9px",color:"#fff",fontSize:12,outline:"none"}}/>
+                      <input type="date" value={form.recurrenceEndDate} onChange={e=>setForm(f=>({...f,recurrenceEndDate:e.target.value}))} style={{width:"100%",background:"#2a2a5a",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,padding:"7px 9px",color:"#fff",fontSize:16,outline:"none"}}/>
                     </div>
                     <div>
                       <label style={{fontSize:9,opacity:0.4,fontWeight:700,textTransform:"uppercase",display:"block",marginBottom:4}}>Aantal keren (optioneel)</label>
-                      <input type="number" placeholder="Bijv. 10" value={form.recurrenceLimit} onChange={e=>setForm(f=>({...f,recurrenceLimit:e.target.value}))} style={{width:"100%",background:"#2a2a5a",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,padding:"7px 9px",color:"#fff",fontSize:12,outline:"none"}}/>
+                      <input type="number" placeholder="Bijv. 10" value={form.recurrenceLimit} onChange={e=>setForm(f=>({...f,recurrenceLimit:e.target.value}))} style={{width:"100%",background:"#2a2a5a",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,padding:"7px 9px",color:"#fff",fontSize:16,outline:"none"}}/>
                     </div>
                   </div>
                   <p style={{fontSize:10,opacity:0.3,marginTop:8,lineHeight:1.3}}>Laat beide leeg voor onbeperkte herhaling. De taak wordt aangemaakt op de geselecteerde dag.</p>
