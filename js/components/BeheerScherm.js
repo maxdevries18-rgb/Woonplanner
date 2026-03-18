@@ -89,6 +89,12 @@ function BeheerScherm({currentUser,onClose,showNotif,initialTab}) {
     setAllUsers(prev=>prev.filter(u=>u.id!==userId));
     showNotif("🗑️ Gebruiker verwijderd","");
   }
+  async function resetPin(userId){
+    if(!currentUser.is_admin) return showNotif("❌ Geen recht","");
+    await supabase.from("users").update({pin:null}).eq("id",userId);
+    setAllUsers(prev=>prev.map(u=>u.id===userId?{...u,pin:null}:u));
+    showNotif("🔓 PIN gereset","Gebruiker moet opnieuw een PIN instellen");
+  }
   const hBtnStyle=(active)=>({padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:active?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.05)",color:active?"#fff":"rgba(255,255,255,0.5)",transition:"all 0.15s"});
   const sLabel={fontSize:11,fontWeight:700,opacity:0.5,letterSpacing:1,textTransform:"uppercase",marginBottom:10,display:"block"};
 
@@ -240,7 +246,12 @@ function BeheerScherm({currentUser,onClose,showNotif,initialTab}) {
                       {user.id===currentUser.id&&<span style={{fontSize:11,background:"rgba(78,205,196,0.15)",color:"#4ECDC4",borderRadius:6,padding:"2px 8px"}}>Jij</span>}
                     </div>
                   </div>
-                  {currentUser.is_admin&&user.id!==currentUser.id&&<button onClick={()=>verwijderGebruiker(user.id)} style={{background:"rgba(255,80,80,0.12)",border:"1px solid rgba(255,80,80,0.25)",borderRadius:8,padding:"5px 10px",color:"#FF6B6B",cursor:"pointer",fontSize:12,fontWeight:700}}>Verwijder</button>}
+                  {currentUser.is_admin&&user.id!==currentUser.id&&(
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>resetPin(user.id)} style={{background:"rgba(255,211,61,0.12)",border:"1px solid rgba(255,211,61,0.25)",borderRadius:8,padding:"5px 10px",color:"#FFD93D",cursor:"pointer",fontSize:12,fontWeight:700}}>🔓 PIN reset</button>
+                      <button onClick={()=>verwijderGebruiker(user.id)} style={{background:"rgba(255,80,80,0.12)",border:"1px solid rgba(255,80,80,0.25)",borderRadius:8,padding:"5px 10px",color:"#FF6B6B",cursor:"pointer",fontSize:12,fontWeight:700}}>Verwijder</button>
+                    </div>
+                  )}
                 </div>
                 {currentUser.is_admin&&user.id!==currentUser.id&&(
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.06)",marginBottom:8}}>
